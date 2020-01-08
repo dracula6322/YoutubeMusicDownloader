@@ -1,14 +1,16 @@
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import javafx.util.Pair;
 import okhttp3.OkHttpClient;
@@ -16,23 +18,73 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class Main {
 
+  public static String outFolder = "C:\\youtube\\";
+
   public static void main(String[] args) {
 
-    runProgram();
+    DownloadedData downloadedData = runProgram();
+    System.out.println("downloadedData.pathToFile = " + downloadedData.pathToFile);
 
-    //parsingDescriptionInfo(testDesc);
+    System.out.println("downloadedData.description = " + downloadedData.description);
+    ArrayList<Pair<String, String>> pairs = parsingDescriptionInfo(downloadedData.description);
+    for (Pair<String, String> pair : pairs) {
+      System.out.println("pair = " + pair);
+    }
+
+    cutFileByPairs(downloadedData.pathToFile, pairs);
 
   }
 
-  private static void runProgram() {
+  private static void cutFileByPairs(String pathToFile, ArrayList<Pair<String, String>> pairs) {
+//    ffmpeg -i movie.mp4 -ss 00:00:03 -t 00:00:08 -async 1 cut.mp4
+
+    File file = new File(pathToFile);
+
+    for (int i = 0; i < pairs.size() - 1; i++) {
+
+      String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe -loglevel quiet -stats"
+          + " -i " + "\"" + pathToFile + "\"" + " "
+          + "-ss " + pairs.get(i).getKey() + " "
+          + "-t " + pairs.get(i + 1).getKey() + " "
+          //+ "-async 1 "
+          + "\"" + (file.getParent() + "\\" + pairs.get(i).getValue()
+          .substring(0, Math.min(10, pairs.get(i).getValue().length())).trim() + "_" + i + ".mp4") + "\"";
+
+      System.out.println("commandPath = " + commandPath);
+
+      try {
+        Runtime runtime = Runtime.getRuntime();
+        Process command = runtime.exec(commandPath);
+        command.waitFor();
+
+        BufferedReader stdInput = new BufferedReader(new
+            InputStreamReader(command.getInputStream()));
+
+        String line;
+        while ((line = stdInput.readLine()) != null) {
+          System.out.println(line);
+        }
+        stdInput.close();
+
+      } catch (IOException | InterruptedException e) {
+        e.printStackTrace();
+        System.out.println(e);
+      }
+
+    }
+
+  }
+
+  private static DownloadedData runProgram() {
     String decodeString = GetVideosRequest.getInstance()
-        .sendPing("https://www.youtube.com/watch?v=obK-k848Vto");
-    // https://www.youtube.com/watch?v=7MSFW8pZ-_4&t=2621s
+        .sendPing("https://www.youtube.com/watch?v=4ceowgHn8BE&t=549s");
+    // https://www.youtube.com/watch?v=obK-k848Vto
     try {
       String oldText;
       do {
@@ -43,29 +95,15 @@ public class Main {
       e.printStackTrace();
     }
 
-//    String[] asd = decodeString.split("&");
-//    String playerResponseRecord = "";
-
-//    String playerResonseString = "player_response=";
-//    for (String s : asd) {
-//      if (s.startsWith(playerResonseString)) {
-//        playerResponseRecord = s.substring(playerResonseString.length());
-//      }
-//    }
-
     String playerResponseString = findPlayerResponse(decodeString);
 
-    String videoUrl = "";
     JSONObject videoJsonObject = new JSONObject();
     JSONObject jsonObject = new JSONObject(playerResponseString);
 
     String titleVideo = jsonObject.getJSONObject("microformat").getJSONObject("playerMicroformatRenderer")
         .getJSONObject("title").getString("simpleText");
-    System.out.println("titleVideo = " + titleVideo);
     String description = jsonObject.getJSONObject("microformat").getJSONObject("playerMicroformatRenderer")
         .getJSONObject("description").getString("simpleText");
-    System.out.println("description = " + description.substring(0, Math.min(description.length(), 10)));
-    parsingDescriptionInfo(description);
 
     JSONObject streamingData = jsonObject.getJSONObject("streamingData");
     JSONArray adaptiveFormats = streamingData.getJSONArray("adaptiveFormats");
@@ -86,15 +124,16 @@ public class Main {
     }
     long startDownload = System.currentTimeMillis();
 
-    videoUrl = videoJsonObject.getString("url");
+    String videoUrl = videoJsonObject.getString("url");
     long videoContentLength = videoJsonObject.getLong("contentLength");
-    System.out.println("videoUrl = " + videoUrl);
-    System.out.println(new Date().toString() + " " + "The start");
+    //System.out.println("videoUrl = " + videoUrl);
+    //System.out.println(new Date().toString() + " " + "The start");
 
     long chuckSize = 10485760;
     ArrayList<Pair<Long, Long>> intervals = new ArrayList<>();
+
     for (long i = 0; i < videoContentLength / chuckSize; i++) {
-      intervals.add(new Pair<>(i * chuckSize, i * chuckSize + chuckSize));
+      intervals.add(new Pair<>(i * chuckSize, i * chuckSize + chuckSize - 1));
     }
     intervals.add(new Pair<>(chuckSize * intervals.size(), videoContentLength));
 
@@ -109,16 +148,45 @@ public class Main {
       }
     }
 
-    System.out.println(new Date().toString() + " " + "The end");
+//    System.out.println(new Date().toString() + " " + "The end");
     long endDownload = System.currentTimeMillis();
     long diff = endDownload - startDownload;
-    System.out.println("buffer.size() = " + buffer.size());
-    System.out.println("second = " + diff);
+//    System.out.println("buffer.size() = " + buffer.size());
+//    System.out.println("second = " + diff);
     diff = Math.max(1, diff);
     int speed = (int) (buffer.size() / diff);
-    System.out.println("speed = " + speed);
+//    System.out.println("speed = " + speed);
 
-    writeBufferToFile(buffer, titleVideo);
+    String fileName = writeBufferToFile(buffer, titleVideo, outFolder);
+//    System.out.println("fileName = " + fileName);
+
+    return new DownloadedData(description, fileName);
+  }
+
+  private static void convertFromM4atoAac(String pathToFile, String pathToOut, String fileName) {
+
+    try {
+
+      String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe "
+          + " -i "
+          + pathToFile + " "
+          + "-acodec copy "
+          + pathToOut;
+      Runtime runtime = Runtime.getRuntime();
+      Process command = runtime.exec(commandPath);
+
+      BufferedReader stdInput = new BufferedReader(new
+          InputStreamReader(command.getInputStream()));
+
+      String line;
+      while ((line = stdInput.readLine()) != null) {
+        System.out.println(line);
+      }
+
+    } catch (IOException e) {
+      e.printStackTrace();
+      System.out.println(e);
+    }
 
   }
 
@@ -179,19 +247,23 @@ public class Main {
     return buffer;
   }
 
-  private static void writeBufferToFile(ByteArrayOutputStream buffer, String titleVideo) {
+  private static String writeBufferToFile(ByteArrayOutputStream buffer, String titleVideo, String pathToFolder) {
 
-    try (FileOutputStream fos = new FileOutputStream(titleVideo.substring(0, Math.min(10, titleVideo.length())) + ".mp4")) {
+    String fileName = pathToFolder + titleVideo.substring(0, Math.min(10, titleVideo.length())) + ".mp4";
+
+    try (FileOutputStream fos = new FileOutputStream(fileName)) {
       fos.write(buffer.toByteArray());
+      return fileName;
     } catch (IOException e) {
       e.printStackTrace();
     }
+    return "";
   }
 
-  private static void parsingDescriptionInfo(String description) {
+  private static ArrayList<Pair<String, String>> parsingDescriptionInfo(String description) {
 
     String[] lines = description.split("\n");
-    ArrayList<Pair<Integer, String>> pairs = new ArrayList<>();
+    ArrayList<Pair<String, String>> pairs = new ArrayList<>();
 
     for (String line : lines) {
 
@@ -222,28 +294,40 @@ public class Main {
           continue;
         }
 //        System.out.println("line = " + line);
-        System.out.println(time);
-
+//        System.out.println(time);
+//
         String clearTime = getAllBadCharacterFromString(time);
 
         String goodTime = setFullFormatTime(clearTime);
 
         String goodLine = line.substring(0, firstPointNumber) + line.substring(secondPointNumber);
         goodLine = goodLine.trim();
-        System.out.println("goodLine = " + goodLine);
+//        System.out.println("goodLine = " + goodLine);
 
 //        System.out.println("goodTime = " + goodTime);
 
-        DateTime dateTime = DateTimeFormat.forPattern("HH:mm:ss").parseDateTime(goodTime);
-        int seconds = dateTime.secondOfDay().get();
 //        System.out.println("seconds = " + seconds);
 
-        pairs.add(new Pair<>(seconds, goodLine));
+        pairs.add(new Pair<>(goodTime, goodLine));
 
       } while (firstPoint != -1);
 
-      pairs.sort(Comparator.comparingInt(Pair::getKey));
+
     }
+    DateTimeFormatter pattern = DateTimeFormat.forPattern("HH:mm:ss");
+
+    pairs.sort(new Comparator<Pair<String, String>>() {
+      @Override
+      public int compare(Pair<String, String> o1, Pair<String, String> o2) {
+        DateTime dateTime = pattern.parseDateTime(o1.getKey());
+        int o1s = dateTime.secondOfDay().get();
+        dateTime = pattern.parseDateTime(o2.getKey());
+        int o2s = dateTime.secondOfDay().get();
+        return Integer.compare(o1s, o2s);
+      }
+    });
+
+    return pairs;
   }
 
   private static String getAllBadCharacterFromString(String substring) {
@@ -278,6 +362,17 @@ public class Main {
     }
 
     return String.join(":", arraySplitTime);
+  }
+
+  private static class DownloadedData {
+
+    String description;
+    String pathToFile;
+
+    public DownloadedData(String description, String pathToFile) {
+      this.description = description;
+      this.pathToFile = pathToFile;
+    }
   }
 
   public static String testDesc = "Unreal Tournament OST.\n"
