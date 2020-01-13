@@ -4,10 +4,12 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import javafx.util.Pair;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
@@ -21,13 +23,32 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 public class Main {
 
-  public static void main(String[] args) {
+  public static void main(String... args) throws IOException, GeneralSecurityException {
 
-    doJob();
+    List<String> links = new ArrayList<>();
+    links.add("https://www.youtube.com/watch?v=SMvXVtKjm5s&t=899s");
+    links.add("https://www.youtube.com/watch?v=5LW20jazxkg");
+    links.add("https://www.youtube.com/watch?v=hrlRAjUR0KQ&has_verified=1");
+    links.add("https://www.youtube.com/watch?v=4CyDFA5IO9U");
+    links.add("https://www.youtube.com/watch?v=ipdoxwEHXbM");
+    links.add("https://www.youtube.com/watch?v=RAYrfhFP-SQ");
+
+
+
+    doJob(links);
 
   }
 
-  private static void telegramBot(){
+  ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  private static void uploadFileInGoogleDrive(String title, List<String> files) {
+
+    GoogleDrive.getInstance().initGoogleDrive();
+    GoogleDrive.getInstance().saveFileInGoogleDrive(title, files);
+
+  }
+
+  private static void telegramBot() {
 
     ApiContextInitializer.init();
     TelegramBotsApi telegramBotsApi = new TelegramBotsApi();
@@ -55,27 +76,61 @@ public class Main {
 
   }
 
-  private static void doJob(){
+  private static void doJob(List<String> links) {
     String outFolder = "C:\\youtube\\";
     String pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe ";
 
-    String videoLink = "https://www.youtube.com/watch?v=YfmkxMuOk6c&t=1756s";
-//    String videoLink = "https://www.youtube.com/watch?v=y71lli8MS8s";
+    for (String videoLink : links) {
 
-    String id = getIdFromLink(pathToYoutubedl, videoLink);
-    downloadFile(pathToYoutubedl, id, outFolder);
+      String id = getIdFromLink(pathToYoutubedl, videoLink);
+      downloadFile(pathToYoutubedl, id, outFolder);
 
-    String jsonData = readJsonFile(outFolder, id);
-    String duration = getTimeFromJson(jsonData);
-    String description = getDescriptionFromJson(jsonData);
+      String jsonData = readJsonFile(outFolder, id);
+      String duration = getTimeFromJson(jsonData);
+      String description = getDescriptionFromJson(jsonData);
+      String title = getTitleFromJson(jsonData);
+      ArrayList<Pair<String, String>> pairs = parsingDescriptionInfo(description);
+      if (pairs.size() == 0) {
+        pairs.add(new Pair<>("00:00:00", title));
+      }
+      pairs = findEqualsName(pairs);
 
-    ArrayList<Pair<String, String>> pairs = parsingDescriptionInfo(description);
-    for (Pair<String, String> pair : pairs) {
-      System.out.println("pair = " + pair);
+      for (Pair<String, String> pair : pairs) {
+        System.out.println("pair = " + pair);
+      }
+
+      File audioFile = getAudioFile(id, outFolder);
+      ArrayList<String> cutFiles = cutFileByPairs(audioFile, pairs, duration);
+
+      uploadFileInGoogleDrive(title, cutFiles);
     }
 
-    File audioFile = getAudioFile(id, outFolder);
-    cutFileByPairs(audioFile, pairs, duration);
+
+  }
+
+  public static ArrayList<Pair<String, String>> findEqualsName(ArrayList<Pair<String, String>> pairs) {
+
+    ArrayList<Pair<String, String>> result = new ArrayList<>();
+    Set<String> set = new HashSet<>();
+    for (Pair<String, String> pair : pairs) {
+      boolean contain = set.contains(pair.getValue());
+      if (!contain) {
+        set.add(pair.getValue());
+        result.add(pair);
+      } else {
+        for (long i = 1; i < Long.MAX_VALUE; i++) {
+          String name = pair.getValue() + " (" + i + ")";
+          if (!set.contains(name)) {
+            set.add(name);
+            Pair<String, String> tmpPair = new Pair<>(pair.getKey(), name);
+            result.add(tmpPair);
+            break;
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   private static File getAudioFile(String id, String outFolder) {
@@ -144,6 +199,14 @@ public class Main {
     return String.valueOf(duration);
   }
 
+  private static String getTitleFromJson(String json) {
+
+    JSONObject jsonObject = new JSONObject(json);
+    String title = jsonObject.getString("title");
+    title = title.replaceAll("[/\\-+.^:,]", "");
+    return title;
+  }
+
   private static String getDescriptionFromJson(String json) {
 
     JSONObject jsonObject = new JSONObject(json);
@@ -193,6 +256,7 @@ public class Main {
       }
     }
     file.delete();
+    file.mkdir();
 
     String commandPath = pathToYoutubedl
         + " -f 140 -o "
@@ -228,7 +292,10 @@ public class Main {
     }
   }
 
-  private static void cutFileByPairs(File audioFile, ArrayList<Pair<String, String>> pairs, String duration) {
+  private static ArrayList<String> cutFileByPairs(File audioFile, ArrayList<Pair<String, String>> pairs,
+      String duration) {
+
+    ArrayList<String> result = new ArrayList<>();
 
     for (int i = 0; i < pairs.size(); i++) {
 
@@ -240,13 +307,18 @@ public class Main {
         endTime = duration;
       }
 
+      String fileName = pairs.get(i).getValue().trim();
+      fileName = fileName.replaceAll("[-+.^:,]", "");
+
+      String audioOutName = (audioFile.getParent() + "\\" + fileName);
+      audioOutName += ".mp4";
+
       String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe -loglevel quiet -stats"
           + " -y "
           + " -i " + "\"" + audioFile.getAbsolutePath() + "\"" + " "
           + " -ss " + startTime + " "
           + " -to " + endTime + " "
-          + " \"" + (audioFile.getParent() + "\\" + pairs.get(i).getValue()
-          .substring(0, Math.min(10, pairs.get(i).getValue().length())).trim() + "_" + i + ".mp4") + "\"";
+          + " \"" + audioOutName + "\"";
 
       System.out.println("commandPath = " + commandPath);
 
@@ -270,12 +342,16 @@ public class Main {
           System.err.println(line);
         }
 
+        result.add(audioOutName);
+
       } catch (IOException | InterruptedException e) {
         e.printStackTrace();
         System.out.println(e);
       }
 
     }
+
+    return result;
 
   }
 
@@ -361,20 +437,15 @@ public class Main {
         pairs.add(new Pair<>(goodTime, goodLine));
 
       } while (firstPoint != -1);
-
-
     }
     DateTimeFormatter pattern = DateTimeFormat.forPattern("HH:mm:ss");
 
-    pairs.sort(new Comparator<Pair<String, String>>() {
-      @Override
-      public int compare(Pair<String, String> o1, Pair<String, String> o2) {
-        DateTime dateTime = pattern.parseDateTime(o1.getKey());
-        int o1s = dateTime.secondOfDay().get();
-        dateTime = pattern.parseDateTime(o2.getKey());
-        int o2s = dateTime.secondOfDay().get();
-        return Integer.compare(o1s, o2s);
-      }
+    pairs.sort((o1, o2) -> {
+      DateTime dateTime = pattern.parseDateTime(o1.getKey());
+      int o1s = dateTime.secondOfDay().get();
+      dateTime = pattern.parseDateTime(o2.getKey());
+      int o2s = dateTime.secondOfDay().get();
+      return Integer.compare(o1s, o2s);
     });
 
     return pairs;
@@ -412,16 +483,5 @@ public class Main {
     }
 
     return String.join(":", arraySplitTime);
-  }
-
-  private static class DownloadedData {
-
-    String description;
-    String pathToFile;
-
-    public DownloadedData(String description, String pathToFile) {
-      this.description = description;
-      this.pathToFile = pathToFile;
-    }
   }
 }
