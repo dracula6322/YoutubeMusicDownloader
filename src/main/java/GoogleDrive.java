@@ -10,8 +10,10 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.drive.Drive;
+import com.google.api.services.drive.Drive.Files;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
+import com.google.api.services.drive.model.FileList;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -31,17 +33,18 @@ public class GoogleDrive {
   }
 
   public GoogleDrive() {
+    initGoogleDrive();
   }
 
   private static final String APPLICATION_NAME = "Google Drive API Java Quickstart";
-  private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+  private static JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
   private static final String TOKENS_DIRECTORY_PATH = "tokens";
 
   private static final String CREDENTIALS_FILE_PATH = ".\\credentials.json";
   private static Drive service;
 
   public void initGoogleDrive() {
-
+    JSON_FACTORY = JacksonFactory.getDefaultInstance(); // TODO
     try {
       NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
       service = new Drive.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
@@ -58,11 +61,12 @@ public class GoogleDrive {
     if (in == null) {
       throw new FileNotFoundException("Resource not found: " + CREDENTIALS_FILE_PATH);
     }
-    GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
+    InputStreamReader credentialsInputStreamReader = new InputStreamReader(in);
+    GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, credentialsInputStreamReader);
 
     // Build flow and trigger user authorization request.
     GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-        HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, DriveScopes.all())
+        HTTP_TRANSPORT, JSON_FACTORY, clientSecrets, Collections.singleton(DriveScopes.DRIVE_FILE))
         .setDataStoreFactory(new FileDataStoreFactory(new java.io.File(TOKENS_DIRECTORY_PATH)))
         .setAccessType("offline")
         .build();
@@ -106,7 +110,46 @@ public class GoogleDrive {
 
     throw new RuntimeException();
   }
+  // 0AO1Vdj22FnXeUk9PVA
+  public String getRootId(){
+    try {
+      return service.files().get("root").setFields("id").execute().getId();
+    } catch (IOException e) {
+      e.printStackTrace();
+      return null;
+    }
+  }
 
+
+
+  public List<File> getFolders(String parentId){
+    try {
+      List<File> result = new ArrayList<File>();
+      Files.List request = service.files().list();
+
+
+
+      do {
+        try {
+          FileList files = request.execute();
+
+          result.addAll(files.getFiles());
+          request.setPageToken(files.getNextPageToken());
+        } catch (IOException e) {
+          System.out.println("An error occurred: " + e);
+          request.setPageToken(null);
+        }
+      } while (request.getPageToken() != null &&
+          request.getPageToken().length() > 0);
+
+      return result;
+
+    } catch (IOException e){
+      e.printStackTrace();
+    }
+
+    return null;
+  }
 
   public void saveFileInGoogleDrive(String nameFolder, List<String> files) {
 
@@ -115,7 +158,5 @@ public class GoogleDrive {
     for (String file : files) {
       saveFileInGoogleDrive(file, parentId);
     }
-
-
   }
 }
