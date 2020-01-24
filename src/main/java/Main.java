@@ -11,6 +11,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import javafx.util.Pair;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -26,47 +30,40 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 public class Main {
 
-  public static String outFolder = "C:\\youtube\\";
+  public static String outFolder = "C:\\youtubeNew\\";
   public static String pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe ";
 
   public static void main(String... args) throws IOException, GeneralSecurityException {
 
     List<String> links = new ArrayList<>();
+    links.add("https://www.youtube.com/watch?v=m81koYhgc5o&t=549s");
 //    links.add("https://www.youtube.com/watch?v=SMvXVtKjm5s&t=899s");
 //    links.add("https://www.youtube.com/watch?v=5LW20jazxkg");
 //    links.add("https://www.youtube.com/watch?v=hrlRAjUR0KQ&has_verified=1");
 //    links.add("https://www.youtube.com/watch?v=4CyDFA5IO9U");
 //    links.add("https://www.youtube.com/watch?v=ipdoxwEHXbM");
 //    links.add("https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s");
-    links.add("https://www.youtube.com/watch?v=m81koYhgc5o");
-//
 //    links.add("https://www.youtube.com/watch?v=N4mPA-tPvtc");
+//    links.add("https://www.youtube.com/watch?v=Wv7ThDcf6FE"); RDR ost from comments
 
-    //links.add("https://www.youtube.com/watch?v=Wv7ThDcf6FE"); RDR ost from comments
+    doJob(links);
 
-//    for (String link : links) {
-//      String fileName = getFileName(pathToYoutubedl, link);
-//      System.out.println("fileName = " + fileName);
-//    }
+//    String host = "pop.mail.ru";// change accordingly
+//    String mailStoreType = "pop3";
+//    String username = "and.solomatin@mail.ru";// change accordingly
+//    String password = "pingvine6322qqq";// change accordingly
+//
+//    GoogleDrive.getInstance().check(host, mailStoreType, username, password);
 
-//    doJob(links);
-
-    getFolders();
   }
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  private static void getFolders() {
-
-    GoogleDrive.getInstance().initGoogleDrive();
-    List<com.google.api.services.drive.model.File> result = GoogleDrive.getInstance().getFolders("");
-    System.out.println("result = " + result);
-  }
 
   private static void uploadFileInGoogleDrive(String title, List<String> files) {
 
     GoogleDrive.getInstance().initGoogleDrive();
-    GoogleDrive.getInstance().saveFileInGoogleDrive(title, files);
+    GoogleDrive.getInstance().saveFileInGoogleDrive(Arrays.asList("Audio"), title, files);
   }
 
   private static void telegramBot() {
@@ -109,6 +106,9 @@ public class Main {
       File audioFile = downloadFile(pathToYoutubedl, id, outFolder, name);
       try {
         checkAudioFile(audioFile);
+//        convertFromM4atoAac(audioFile.getAbsolutePath(), outFolder, "new.aac");
+        //     audioFile = new File(audioFile.getAbsolutePath() + ".aac");
+        //     checkAudioFile(audioFile);
       } catch (FileNotFoundException e) {
         e.printStackTrace();
         System.err.println(e);
@@ -125,7 +125,7 @@ public class Main {
       JSONArray chapters = getChaptersFromJson(jsonData);
       ArrayList<Pair<String, String>> chaptersPairs = parsingChaptersInfo(chapters);
 //
-      MongoDBHelper.getInstance().writeComparePairResult(id, descPairs, chaptersPairs, jsonData);
+      //MongoDBHelper.getInstance().writeComparePairResult(id, descPairs, chaptersPairs, jsonData);
 //
       System.out.println("descPairs = " + descPairs);
 //
@@ -136,7 +136,7 @@ public class Main {
       if (pairs.size() == 0) {
         pairs.add(new Pair<>("00:00:00", name));
       }
-      findEqualsName(pairs);
+      //   findEqualsName(pairs);
 
       for (Pair<String, String> pair : pairs) {
         System.out.println("pair = " + pair);
@@ -227,7 +227,8 @@ public class Main {
     try {
       Runtime runtime = Runtime.getRuntime();
       Process command = runtime.exec(commandPath);
-      command.waitFor();
+      int executionCode = command.waitFor();
+      System.out.println("executionCode = " + executionCode);
 
       BufferedReader stdInput = new BufferedReader(new
           InputStreamReader(command.getInputStream()));
@@ -253,6 +254,7 @@ public class Main {
     return result;
 
   }
+
 
   private static String getTimeFromJson(String json) {
 
@@ -322,43 +324,132 @@ public class Main {
 
   private static String[] executeFunctionAndGetStringOutput(String stringCommand) {
 
-    return executeFunctionAndGetStringOutput(stringCommand, false);
+    return executeFunctionAndGetStringOutput(stringCommand, true, false);
   }
 
-  private static String[] executeFunctionAndGetStringOutput(String stringCommand, boolean isReturnError) {
 
-    ArrayList<String> result = new ArrayList<>();
+  private static String[] executeFunctionAndGetStringOutputSync(String stringCommand, boolean isReturnGood,
+      boolean isReturnError) {
+
+    List<String> result = new CopyOnWriteArrayList<>();
+    CountDownLatch countDownLatch = new CountDownLatch(2);
+
+    ExecutorService inputThread = Executors.newSingleThreadExecutor();
+    ExecutorService errorThread = Executors.newSingleThreadExecutor();
 
     try {
       Runtime runtime = Runtime.getRuntime();
       Process command = runtime.exec(stringCommand);
-      command.waitFor();
+
+      inputThread.execute(new Runnable() {
+        @Override
+        public void run() {
+          System.out.println("nameThreadWithInput " + stringCommand + " " + Thread.currentThread().getName());
+          String line;
+          try {
+            if (isReturnGood) {
+              BufferedReader stdInput = new BufferedReader(new
+                  InputStreamReader(command.getInputStream()));
+              while ((line = stdInput.readLine()) != null) {
+                System.out.println(line);
+                result.add(line);
+              }
+              stdInput.close();
+            }
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+          countDownLatch.countDown();
+        }
+      });
+
+      errorThread.execute(new Runnable() {
+        @Override
+        public void run() {
+          System.out.println("nameThreadWithError " + stringCommand + " " + Thread.currentThread().getName());
+          String line;
+
+          try {
+            if (isReturnError) {
+              BufferedReader stdInput = new BufferedReader(new
+                  InputStreamReader(command.getErrorStream()));
+              while ((line = stdInput.readLine()) != null) {
+                System.err.println(line);
+                result.add(line);
+              }
+              stdInput.close();
+            }
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+          countDownLatch.countDown();
+        }
+      });
+      int executionCode = command.waitFor();
+      System.out.println("executionCode = " + executionCode);
+
+    } catch (IOException | InterruptedException e) {
+      e.printStackTrace();
+      System.err.println(e);
+    }
+
+    try {
+      countDownLatch.await();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+
+    inputThread.shutdown();
+    errorThread.shutdown();
+
+    Objects.requireNonNull(result);
+
+    String[] massResult = new String[result.size()];
+
+    return result.toArray(massResult);
+  }
+
+  private static String[] executeFunctionAndGetStringOutput(String stringCommand, boolean isReturnGood,
+      boolean isReturnError) {
+
+    ArrayList<String> result = new ArrayList<>();
+    CountDownLatch countDownLatch = new CountDownLatch(2);
+    try {
+      Runtime runtime = Runtime.getRuntime();
+      Process command = runtime.exec(stringCommand);
+
+      int executionCode = command.waitFor();
+      System.out.println("executionCode = " + executionCode);
 
       BufferedReader stdInput = new BufferedReader(new
           InputStreamReader(command.getInputStream()));
 
       String line;
-      while ((line = stdInput.readLine()) != null) {
-        System.out.println(line);
-        if (!isReturnError) {
-          result.add(line);
-        }
-      }
-      stdInput.close();
-      stdInput = new BufferedReader(new
-          InputStreamReader(command.getErrorStream()));
 
-      while ((line = stdInput.readLine()) != null) {
-        System.err.println(line);
-        if (isReturnError) {
+      if (isReturnGood) {
+        while ((line = stdInput.readLine()) != null) {
+          System.out.println(line);
           result.add(line);
         }
+        stdInput.close();
       }
-      stdInput.close();
+
+      if (isReturnError) {
+        BufferedReader errInput = new BufferedReader(new
+            InputStreamReader(command.getErrorStream()));
+
+        while ((line = errInput.readLine()) != null) {
+          System.err.println(line);
+          result.add(line);
+        }
+        errInput.close();
+      }
+
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
       System.err.println(e);
+
     }
 
     Objects.requireNonNull(result);
@@ -458,7 +549,7 @@ public class Main {
       if (i != pairs.size() - 1) {
         endTime = pairs.get(i + 1).getKey();
       } else {
-        endTime = duration;
+        endTime = String.valueOf(Integer.parseInt(duration));
       }
 
       String fileName = pairs.get(i).getValue().trim();
@@ -467,22 +558,26 @@ public class Main {
       String audioOutName = (audioFile.getParent() + "\\" + fileName);
       audioOutName += ".mp4";
 
-      String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe -stats"
-          + " -y "
+      String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe "
+
+          + " -loglevel debug "
+          //   + " -y "
           + " -i " + "\"" + audioFile.getAbsolutePath() + "\"" + " "
           + " -ss " + startTime + " "
           + " -to " + endTime + " "
           + " \"" + audioOutName + "\"";
 
       System.out.println("commandPath = " + commandPath);
-      String[] executeResult = executeFunctionAndGetStringOutput(commandPath, true);
+      String[] executeResult = executeFunctionAndGetStringOutputSync(commandPath, true, true);
 
       audioOutName = getFileNameFromFfmpegCut(executeResult);
 
       File file = new File(audioOutName);
       if (!file.exists()) {
         System.out.println("audioOutName = " + audioOutName);
-      } else result.add(audioOutName);
+      } else {
+        result.add(audioOutName);
+      }
 
 
     }
@@ -490,12 +585,12 @@ public class Main {
     return result;
   }
 
-  private static String getFileNameFromFfmpegCut(String[] executeResult){
+  private static String getFileNameFromFfmpegCut(String[] executeResult) {
 
     String result = null;
 
     for (String s : executeResult) {
-      if(s.startsWith("Output #0")){
+      if (s.startsWith("Output #0")) {
         int firstPoint = s.indexOf(" to ") + " to ".length() + "\'".length();
         return s.substring(firstPoint, s.length() - 2);
       }
@@ -504,33 +599,52 @@ public class Main {
     return result;
   }
 
+  public static ExecutorService singleThread = Executors.newSingleThreadExecutor();
+
   private static void convertFromM4atoAac(String pathToFile, String pathToOut, String fileName) {
 
     try {
 
       String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe "
+          + " -y "
           + " -i "
-          + pathToFile + " "
-          + "-acodec copy "
-          + pathToOut;
+          + " \"" + pathToFile + "\" " + " "
+          + " -codec:a aac "
+          + " \"" + pathToFile + ".aac" + "\" " + " ";
+      System.out.println("commandPath = " + commandPath);
       Runtime runtime = Runtime.getRuntime();
       Process command = runtime.exec(commandPath);
 
-      BufferedReader stdInput = new BufferedReader(new
-          InputStreamReader(command.getInputStream()));
+      singleThread.execute(new Runnable() {
+        @Override
+        public void run() {
+          System.out.println("\"Start Thread\" = " + "Start Thread");
+          try {
+            String line;
 
-      String line;
-      while ((line = stdInput.readLine()) != null) {
-        System.out.println(line);
-      }
+            BufferedReader errorInput = new BufferedReader(new
+                InputStreamReader(command.getErrorStream()));
 
-      BufferedReader errorInput = new BufferedReader(new
-          InputStreamReader(command.getErrorStream()));
+            while ((line = errorInput.readLine()) != null) {
+              System.err.println(line);
+            }
 
-      while ((line = errorInput.readLine()) != null) {
-        System.err.println(line);
-      }
-    } catch (IOException e) {
+            BufferedReader stdInput = new BufferedReader(new
+                InputStreamReader(command.getInputStream()));
+
+            while ((line = stdInput.readLine()) != null) {
+              System.out.println(line);
+            }
+
+          } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println(e);
+          }
+        }
+      });
+      System.out.println("command.waitFor() = " + command.waitFor());
+
+    } catch (IOException | InterruptedException e) {
       e.printStackTrace();
       System.out.println(e);
     }
