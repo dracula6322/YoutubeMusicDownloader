@@ -25,21 +25,18 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
 import javafx.util.Pair;
-import javax.mail.BodyPart;
-import javax.mail.Folder;
-import javax.mail.Message;
-import javax.mail.Multipart;
-import javax.mail.Session;
-import javax.mail.Store;
 
 public class GoogleDrive {
 
-  private static GoogleDrive ourInstance = new GoogleDrive();
+
+  public static class GoogleDriveHolder {
+
+    public static final GoogleDrive HOLDER_INSTANCE = new GoogleDrive();
+  }
 
   public static GoogleDrive getInstance() {
-    return ourInstance;
+    return GoogleDriveHolder.HOLDER_INSTANCE;
   }
 
   public GoogleDrive() {
@@ -47,14 +44,13 @@ public class GoogleDrive {
   }
 
   private static final String APPLICATION_NAME = "Youtube music downloader";
-  private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
+  private static JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
   private static final String TOKENS_DIRECTORY_PATH = "tokens";
 
   private static final String CREDENTIALS_FILE_PATH = ".\\credentials.json";
   private static Drive service;
 
   public void initGoogleDrive() {
-    //JSON_FACTORY = JacksonFactory.getDefaultInstance(); // TODO
     try {
       NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
       service = new Drive.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
@@ -128,80 +124,18 @@ public class GoogleDrive {
     return result;
   }
 
-  public void check(String host, String storeType, String user,
-      String password) {
-    try {
-
-      //create properties field
-      Properties properties = new Properties();
-
-      properties.put("mail.pop3.host", host);
-      properties.put("mail.pop3.port", "995");
-      properties.put("mail.pop3.starttls.enable", "true");
-      Session emailSession = Session.getDefaultInstance(properties);
-
-      //create the POP3 store object and connect with the pop server
-      Store store = emailSession.getStore("pop3s");
-
-      store.connect(host, user, password);
-
-      //create the folder object and open it
-      Folder emailFolder = store.getFolder("INBOX");
-      emailFolder.open(Folder.READ_ONLY);
-
-      // retrieve the messages from the folder in an array and print it
-      Message[] messages = emailFolder.getMessages();
-      System.out.println("messages.length---" + messages.length);
-
-//      for (int i = 0, n = messages.length; i < n; i++) {
-//        Message message = messages[i];
-//        System.out.println("---------------------------------");
-//        System.out.println("Email Number " + (i + 1));
-//        System.out.println("Subject: " + message.getSubject());
-//        System.out.println("From: " + message.getFrom()[0]);
-//        System.out.println("Text: " + message.getContent().toString());
-//      }
-
-      Message message = emailFolder.getMessage(emailFolder.getMessageCount());
-      Multipart mp = (Multipart) message.getContent();
-      // Вывод содержимого в консоль
-      for (int i = 0; i < mp.getCount(); i++) {
-        BodyPart bp = mp.getBodyPart(i);
-        if (bp.getFileName() == null) {
-          System.out.println("    " + i + ". сообщение : '" +
-              bp.getContent() + "'");
-        } else {
-          System.out.println("    " + i + ". файл : '" +
-              bp.getFileName() + "'");
-        }
-      }
-
-      //close the store and folder objects
-      emailFolder.close(false);
-      store.close();
-
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-  }
 
   public static Pair<Boolean, List<FolderStructure>> getFilesByFolderName(String folderNameToFile, String parentId) {
 
     ArrayList<FolderStructure> currentFolderStructure = getFilesById(parentId);
+    ArrayList<FolderStructure> result = new ArrayList<>();
 
-    boolean weFoundFile = false;
     for (FolderStructure folderStructure : currentFolderStructure) {
       if (folderStructure.getName().equals(folderNameToFile)) {
-        currentFolderStructure = getFilesById(folderStructure.id);
-        weFoundFile = true;
-        break;
+        result.add(folderStructure);
       }
     }
-    if (weFoundFile) {
-      return new Pair<>(true, currentFolderStructure);
-    }
-
-    return new Pair<>(false, currentFolderStructure);
+    return new Pair<>(!result.isEmpty(), result);
   }
 
 
@@ -251,15 +185,19 @@ public class GoogleDrive {
 
       if (files.getKey()) {
         //createFolderWithParents(subList.get(subList.size() - 1), files.getValue().get(0).parents);
+        parentId = files.getValue().get(0).getId();
       } else {
-        //parentId = files.getValue().get(0).getParents().get(0);
         files = createFolderWithParents(subFolderName, parentId);
         parentId = files.getValue().get(0).getId();
       }
     }
-
-    String newCreatedFolderId = createFolderWithParents(folderName, parentId).getValue().get(0).getId();
-    return newCreatedFolderId;
+    files = getFilesByFolderName(folderName, parentId);
+    if (files.getKey()) {
+      parentId = files.getValue().get(0).getId();
+    } else {
+      parentId = createFolderWithParents(folderName, parentId).getValue().get(0).getId();
+    }
+    return parentId;
 
 //    for (FolderStructure file : files) {
 //      deleteFileById(file.getId());

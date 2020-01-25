@@ -22,11 +22,6 @@ import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.telegram.telegrambots.ApiContextInitializer;
-import org.telegram.telegrambots.bots.TelegramLongPollingBot;
-import org.telegram.telegrambots.meta.TelegramBotsApi;
-import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 public class Main {
 
@@ -36,63 +31,69 @@ public class Main {
   public static void main(String... args) throws IOException, GeneralSecurityException {
 
     List<String> links = new ArrayList<>();
-    links.add("https://www.youtube.com/watch?v=m81koYhgc5o&t=549s");
-//    links.add("https://www.youtube.com/watch?v=SMvXVtKjm5s&t=899s");
-//    links.add("https://www.youtube.com/watch?v=5LW20jazxkg");
-//    links.add("https://www.youtube.com/watch?v=hrlRAjUR0KQ&has_verified=1");
-//    links.add("https://www.youtube.com/watch?v=4CyDFA5IO9U");
-//    links.add("https://www.youtube.com/watch?v=ipdoxwEHXbM");
-//    links.add("https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s");
-//    links.add("https://www.youtube.com/watch?v=N4mPA-tPvtc");
-//    links.add("https://www.youtube.com/watch?v=Wv7ThDcf6FE"); RDR ost from comments
+    links.add("https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s");
+    links.add("https://www.youtube.com/watch?v=Wv7ThDcf6FE"); //RDR ost from comments
 
     doJob(links);
 
-//    String host = "pop.mail.ru";// change accordingly
-//    String mailStoreType = "pop3";
-//    String username = "and.solomatin@mail.ru";// change accordingly
-//    String password = "pingvine6322qqq";// change accordingly
-//
-//    GoogleDrive.getInstance().check(host, mailStoreType, username, password);
+
+//    GoogleDrive.getInstance().createFolder(Arrays.asList("Audio"), "Hi");
+
+    //getDescFromYoutubeApi("https://www.youtube.com/watch?v=Wv7ThDcf6FE");
 
   }
 
-  ////////////////////////////////////////////////////////////////////////////////////////////////////
+  private static ArrayList<Pair<String, String>> getDescFromYoutubeApi(String link) {
 
-
-  private static void uploadFileInGoogleDrive(String title, List<String> files) {
-
-    GoogleDrive.getInstance().initGoogleDrive();
-    GoogleDrive.getInstance().saveFileInGoogleDrive(Arrays.asList("Audio"), title, files);
-  }
-
-  private static void telegramBot() {
-
-    ApiContextInitializer.init();
-    TelegramBotsApi telegramBotsApi = new TelegramBotsApi();
-
-    try {
-      telegramBotsApi.registerBot(new TelegramLongPollingBot() {
-        @Override
-        public String getBotToken() {
-          return "826400786:AAFQOCssfBejtEhZPHgM89qb7b4bVRQTBiY";
-        }
-
-        @Override
-        public void onUpdateReceived(Update update) {
-          System.out.println("update = " + update);
-        }
-
-        @Override
-        public String getBotUsername() {
-          return "BotUSerNameCurrent";
-        }
-      });
-    } catch (TelegramApiException e) {
-      e.printStackTrace();
+    String idVideo = getIdFromLink(pathToYoutubedl, link);
+    List<String> desc = YoutubeController.getInstance().getComments(idVideo);
+    ArrayList<Pair<String, String>> result = new ArrayList<>();
+    for (String s : desc) {
+      ArrayList<Pair<String, String>> parsingDescriptionResult = parsingDescriptionInfo(s);
+      System.out.println("s = " + s);
+      System.out.println("parsingDescriptionResult.size() = " + parsingDescriptionResult.size());
+      if (parsingDescriptionResult.size() > result.size()) {
+        result = parsingDescriptionResult;
+      }
     }
 
+    return result;
   }
+
+  private static void uploadFileInGoogleDrive(List<String> pathToSave, String title, List<String> files) {
+
+    GoogleDrive.getInstance().saveFileInGoogleDrive(pathToSave, title, files);
+  }
+
+  private static ArrayList<Pair<String, String>> getPairs(String videoLink, String jsonData, String name) {
+
+    ArrayList<Pair<String, String>> result;
+
+    String descriptionFromJson = getDescriptionFromJson(jsonData);
+    ArrayList<Pair<String, String>> descPairs = parsingDescriptionInfo(descriptionFromJson);
+
+    JSONArray chapters = getChaptersFromJson(jsonData);
+    ArrayList<Pair<String, String>> chaptersPairs = parsingChaptersInfo(chapters);
+    if (descPairs.size() > chaptersPairs.size()) {
+      result = descPairs;
+    } else {
+      result = chaptersPairs;
+    }
+
+    ArrayList<Pair<String, String>> commentPairs = getDescFromYoutubeApi(videoLink);
+    if (commentPairs.size() > result.size()) {
+      result = commentPairs;
+    }
+
+
+    if (result.size() == 0) {
+      result.add(new Pair<>("00:00:00", name));
+    }
+
+    return result;
+  }
+
+  //MongoDBHelper.getInstance().writeComparePairResult(id, descPairs, chaptersPairs, jsonData);
 
   private static void doJob(List<String> links) {
 
@@ -100,7 +101,7 @@ public class Main {
 
       String id = getIdFromLink(pathToYoutubedl, videoLink);
       String name = getFileName(pathToYoutubedl, id);
-      clearFolder(outFolder + "\\" + id);
+      deleteAndCreateFolder(outFolder + "\\" + id);
       downloadJson(pathToYoutubedl, id, outFolder, name);
 
       File audioFile = downloadFile(pathToYoutubedl, id, outFolder, name);
@@ -117,35 +118,13 @@ public class Main {
 //
       String jsonData = readJsonFile(outFolder, id);
       String duration = getTimeFromJson(jsonData);
-      String description = getDescriptionFromJson(jsonData);
-//
-//      String title = getTitleFromJson(jsonData);
-      ArrayList<Pair<String, String>> descPairs = parsingDescriptionInfo(description);
-//
-      JSONArray chapters = getChaptersFromJson(jsonData);
-      ArrayList<Pair<String, String>> chaptersPairs = parsingChaptersInfo(chapters);
-//
-      //MongoDBHelper.getInstance().writeComparePairResult(id, descPairs, chaptersPairs, jsonData);
-//
-      System.out.println("descPairs = " + descPairs);
-//
-      System.out.println("\"Hi\" = " + "Hi");
-//
-      ArrayList<Pair<String, String>> pairs = new ArrayList<>(descPairs);
-//
-      if (pairs.size() == 0) {
-        pairs.add(new Pair<>("00:00:00", name));
-      }
-      //   findEqualsName(pairs);
+      ArrayList<Pair<String, String>> pairs = getPairs(videoLink, jsonData, name);
 
-      for (Pair<String, String> pair : pairs) {
-        System.out.println("pair = " + pair);
-      }
 
       //    File newAudioFile = getAudioFile(id, outFolder, name);
       ArrayList<String> cutFiles = cutFileByPairs(audioFile, pairs, duration);
 
-      uploadFileInGoogleDrive(name, cutFiles);
+      uploadFileInGoogleDrive(Arrays.asList("Audio"), name, cutFiles);
     }
   }
 
@@ -329,13 +308,10 @@ public class Main {
 
 
   private static String[] executeFunctionAndGetStringOutputSync(String stringCommand, boolean isReturnGood,
-      boolean isReturnError) {
+      boolean isReturnError, ExecutorService inputThread, ExecutorService errorThread) {
 
     List<String> result = new CopyOnWriteArrayList<>();
     CountDownLatch countDownLatch = new CountDownLatch(2);
-
-    ExecutorService inputThread = Executors.newSingleThreadExecutor();
-    ExecutorService errorThread = Executors.newSingleThreadExecutor();
 
     try {
       Runtime runtime = Runtime.getRuntime();
@@ -398,9 +374,6 @@ public class Main {
     } catch (InterruptedException e) {
       e.printStackTrace();
     }
-
-    inputThread.shutdown();
-    errorThread.shutdown();
 
     Objects.requireNonNull(result);
 
@@ -472,7 +445,7 @@ public class Main {
     return outputResult[0];
   }
 
-  private static void clearFolder(String pathToFolder) {
+  private static void deleteAndCreateFolder(String pathToFolder) {
 
     File file = new File(pathToFolder);
     if (file.exists()) {
@@ -540,9 +513,10 @@ public class Main {
 
     ArrayList<String> result = new ArrayList<>();
 
-    int fileCount = pairs.size();
+    ExecutorService inputThread = Executors.newSingleThreadExecutor();
+    ExecutorService errorThread = Executors.newSingleThreadExecutor();
 
-    for (int i = 0; i < fileCount; i++) {
+    for (int i = 0; i < pairs.size(); i++) {
 
       String startTime = pairs.get(i).getKey();
       String endTime;
@@ -568,7 +542,8 @@ public class Main {
           + " \"" + audioOutName + "\"";
 
       System.out.println("commandPath = " + commandPath);
-      String[] executeResult = executeFunctionAndGetStringOutputSync(commandPath, true, true);
+
+      String[] executeResult = executeFunctionAndGetStringOutputSync(commandPath, true, true, inputThread, errorThread);
 
       audioOutName = getFileNameFromFfmpegCut(executeResult);
 
@@ -581,6 +556,9 @@ public class Main {
 
 
     }
+
+    inputThread.shutdown();
+    errorThread.shutdown();
 
     return result;
   }
@@ -599,65 +577,12 @@ public class Main {
     return result;
   }
 
-  public static ExecutorService singleThread = Executors.newSingleThreadExecutor();
-
-  private static void convertFromM4atoAac(String pathToFile, String pathToOut, String fileName) {
-
-    try {
-
-      String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe "
-          + " -y "
-          + " -i "
-          + " \"" + pathToFile + "\" " + " "
-          + " -codec:a aac "
-          + " \"" + pathToFile + ".aac" + "\" " + " ";
-      System.out.println("commandPath = " + commandPath);
-      Runtime runtime = Runtime.getRuntime();
-      Process command = runtime.exec(commandPath);
-
-      singleThread.execute(new Runnable() {
-        @Override
-        public void run() {
-          System.out.println("\"Start Thread\" = " + "Start Thread");
-          try {
-            String line;
-
-            BufferedReader errorInput = new BufferedReader(new
-                InputStreamReader(command.getErrorStream()));
-
-            while ((line = errorInput.readLine()) != null) {
-              System.err.println(line);
-            }
-
-            BufferedReader stdInput = new BufferedReader(new
-                InputStreamReader(command.getInputStream()));
-
-            while ((line = stdInput.readLine()) != null) {
-              System.out.println(line);
-            }
-
-          } catch (IOException e) {
-            e.printStackTrace();
-            System.out.println(e);
-          }
-        }
-      });
-      System.out.println("command.waitFor() = " + command.waitFor());
-
-    } catch (IOException | InterruptedException e) {
-      e.printStackTrace();
-      System.out.println(e);
-    }
-
-  }
-
   private static ArrayList<Pair<String, String>> parsingChaptersInfo(JSONArray chapters) {
 
     ArrayList<Pair<String, String>> pairs = new ArrayList<>();
     DateTimeFormatter pattern = DateTimeFormat.forPattern("HH:mm:ss");
 
     for (int i = 0; i < chapters.length(); i++) {
-//{"end_time": 103.0, "start_time": 102.0, "title": "0- / Main Menu"}
       JSONObject jsonObject = chapters.getJSONObject(i);
       double endTime = jsonObject.getDouble("end_time");
       double startTime = jsonObject.getDouble("start_time");
