@@ -1,3 +1,5 @@
+package com.green.square.youtubedownloader;
+
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
 import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
@@ -94,7 +96,7 @@ public class FolderStructure {
 
   @Override
   public String toString() {
-    return "FolderStructure{" +
+    return "com.green.square.youtubedownloader.FolderStructure{" +
         "isFolder=" + isFolder +
         ", id='" + id + '\'' +
         ", kind='" + kind + '\'' +

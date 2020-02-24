@@ -1,21 +1,35 @@
+package com.green.square.youtubedownloader;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.security.GeneralSecurityException;
+import java.io.Reader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javafx.util.Pair;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.http.util.TextUtils;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.joda.time.format.DateTimeFormat;
@@ -23,35 +37,191 @@ import org.joda.time.format.DateTimeFormatter;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-public class Main {
+public class YoutubeDownloader {
 
-  public static String outFolder = "C:\\youtubeNew\\";
-  public static String pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe ";
 
-  public static void main(String... args) throws IOException, GeneralSecurityException {
+  public static void main(String... args) {
+
+    getMusic(args);
+  }
+
+  public static void getMusic(String[] args) {
+
+    String outFolder = "C:\\youtubeNew\\";
+    String pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe";
+    String linkId = "https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s";
+
+    CommandArgumentsResult defaultArguments = new CommandArgumentsResult(pathToYoutubedl, outFolder, linkId);
+    CommandArgumentsResult arguments = parsingArguments(args, defaultArguments);
+
+    System.out.println("arguments = " + arguments);
+
+    outFolder = arguments.outputFolderPath;
+    pathToYoutubedl = arguments.pathToYoutubedl;
+    linkId = arguments.linkId;
 
     List<String> links = new ArrayList<>();
-    links.add("https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s");
-    links.add("https://www.youtube.com/watch?v=Wv7ThDcf6FE"); //RDR ost from comments
+    links.add(linkId);
 
-    doJob(links);
+    ArrayList<String> ids = new ArrayList<>();
 
+    ExecutorService inputThread = Executors.newSingleThreadExecutor();
+    ExecutorService errorThread = Executors.newSingleThreadExecutor();
 
-//    GoogleDrive.getInstance().createFolder(Arrays.asList("Audio"), "Hi");
+    for (String videoLink : links) {
+      String id = getIdFromLink(pathToYoutubedl, videoLink, inputThread, errorThread);
+      System.out.println("id = " + id);
+      if (TextUtils.isEmpty(id)) {
+        throw new NullPointerException();
+      }
+      ids.add(id);
+    }
 
-    //getDescFromYoutubeApi("https://www.youtube.com/watch?v=Wv7ThDcf6FE");
+    for (String id : ids) {
+
+      String name = getFileName(pathToYoutubedl, id, inputThread, errorThread);
+      System.out.println("name = " + name);
+      if (TextUtils.isEmpty(name)) {
+        throw new NullPointerException();
+      }
+
+      String jsonData = downloadJsonInMemory(pathToYoutubedl, id, name, inputThread, errorThread);
+
+      String audioFileName = getAudioFileNameFromJsonData(jsonData);
+      System.out.println("audioFileName = " + audioFileName);
+      if (TextUtils.isEmpty(audioFileName)) {
+        throw new NullPointerException();
+      }
+
+      File createdFolder = deleteAndCreateFolder(outFolder + File.separator + id, audioFileName);
+      System.out.println("createdFolder = " + createdFolder);
+      if (!createdFolder.exists()) {
+        throw new NullPointerException();
+      }
+
+      File downloadedAudioFile;
+      Path path = Paths.get(createdFolder + File.separator + audioFileName);
+      if (Files.exists(path)) {
+        System.out.println("File exists and don't need download it");
+        downloadedAudioFile = path.toFile();
+      } else {
+        downloadedAudioFile = downloadFile(pathToYoutubedl, id, outFolder, name, inputThread, errorThread);
+        System.out.println("downloadedAudioFile = " + downloadedAudioFile);
+      }
+
+      try {
+        checkAudioFile(downloadedAudioFile);
+////        convertFromM4atoAac(audioFile.getAbsolutePath(), outFolder, "new.aac");
+//        //     audioFile = new File(audioFile.getAbsolutePath() + ".aac");
+//        //     checkAudioFile(audioFile);
+//        //
+        //String jsonData = readJsonFile(outFolder, id);
+        String duration = getTimeFromJson(jsonData);
+        ArrayList<Pair<String, String>> pairs = getPairs(id, jsonData, name, inputThread, errorThread,
+            pathToYoutubedl);
+        for (Pair<String, String> pair : pairs) {
+          System.out.println("pair = " + pair);
+        }
+
+        File newAudioFile = getAudioFile(id, outFolder, name);
+        ArrayList<String> cutFiles = cutFileByPairs(downloadedAudioFile, pairs, duration, inputThread, errorThread);
+
+        //uploadFileInGoogleDrive(Arrays.asList("Audio"), name, cutFiles);
+      } catch (FileNotFoundException e) {
+        e.printStackTrace();
+        System.err.println(e);
+      }
+
+    }
+
+    inputThread.shutdown();
+    errorThread.shutdown();
+  }
+
+  private static void getFileNameFromJsonPath(String jsonPath) {
+
+    // public static String outFolder = "C:\\youtubeNew\\";
+    //  public static String pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe";
+
+    File file = new File(jsonPath);
+    String fileName = file.getName();
+
 
   }
 
-  private static ArrayList<Pair<String, String>> getDescFromYoutubeApi(String link) {
+  private static CommandArgumentsResult parsingArguments(String[] args, CommandArgumentsResult defaultValue) {
 
-    String idVideo = getIdFromLink(pathToYoutubedl, link);
-    List<String> desc = YoutubeController.getInstance().getComments(idVideo);
+    Options options = new Options();
+
+    Option optionYoutubedlOption = new Option("a", "pathToYoutubedl", true, "PathToYoutubedl");
+    optionYoutubedlOption.setRequired(false);
+    options.addOption(optionYoutubedlOption);
+
+    Option outputFolderOption = new Option("b", "outputFolder", true, "OutputFolder");
+    outputFolderOption.setRequired(false);
+    options.addOption(outputFolderOption);
+
+    Option linkIdOption = new Option("linkId", "linkId", true, "LinkId");
+    linkIdOption.setRequired(true);
+    options.addOption(linkIdOption);
+
+    CommandLineParser parser = new DefaultParser();
+    HelpFormatter formatter = new HelpFormatter();
+    CommandLine cmd;
+
+    try {
+      cmd = parser.parse(options, args);
+
+      if (cmd.hasOption("a")) {
+        defaultValue.pathToYoutubedl = cmd.getOptionValue("a");
+      }
+
+      if (cmd.hasOption("b")) {
+        defaultValue.outputFolderPath = cmd.getOptionValue("b");
+      }
+
+      if (cmd.hasOption("linkId")) {
+        defaultValue.linkId = cmd.getOptionValue("linkId");
+      }
+
+    } catch (ParseException e) {
+      System.out.println(e.getMessage());
+      formatter.printHelp("utility-name", options);
+      // System.exit(1);
+    }
+
+    return defaultValue;
+  }
+
+  public static class CommandArgumentsResult {
+
+    private String pathToYoutubedl;
+    private String outputFolderPath;
+    private String linkId;
+
+    public CommandArgumentsResult(String pathToYoutubedl, String outputFolderPath, String linkId) {
+      this.pathToYoutubedl = pathToYoutubedl;
+      this.outputFolderPath = outputFolderPath;
+      this.linkId = linkId;
+    }
+
+    @Override
+    public String toString() {
+      return "CommandArgumentsResult{" +
+          "pathToYoutubedl='" + pathToYoutubedl + '\'' +
+          ", outputFolderPath='" + outputFolderPath + '\'' +
+          ", shortId='" + linkId + '\'' +
+          '}';
+    }
+  }
+
+  private static ArrayList<Pair<String, String>> getDescFromYoutubeApi(String videoId, String pathToYoutubedl,
+      ExecutorService inputThread, ExecutorService errorThread) {
+
+    List<String> desc = YoutubeAPIController.getInstance().getComments(videoId);
     ArrayList<Pair<String, String>> result = new ArrayList<>();
     for (String s : desc) {
       ArrayList<Pair<String, String>> parsingDescriptionResult = parsingDescriptionInfo(s);
-      System.out.println("s = " + s);
-      System.out.println("parsingDescriptionResult.size() = " + parsingDescriptionResult.size());
       if (parsingDescriptionResult.size() > result.size()) {
         result = parsingDescriptionResult;
       }
@@ -61,11 +231,11 @@ public class Main {
   }
 
   private static void uploadFileInGoogleDrive(List<String> pathToSave, String title, List<String> files) {
-
     GoogleDrive.getInstance().saveFileInGoogleDrive(pathToSave, title, files);
   }
 
-  private static ArrayList<Pair<String, String>> getPairs(String videoLink, String jsonData, String name) {
+  private static ArrayList<Pair<String, String>> getPairs(String videoId, String jsonData, String name,
+      ExecutorService inputThread, ExecutorService errorThread, String pathToYoutubedl) {
 
     ArrayList<Pair<String, String>> result;
 
@@ -80,52 +250,17 @@ public class Main {
       result = chaptersPairs;
     }
 
-    ArrayList<Pair<String, String>> commentPairs = getDescFromYoutubeApi(videoLink);
+    ArrayList<Pair<String, String>> commentPairs = getDescFromYoutubeApi(videoId, pathToYoutubedl, inputThread,
+        errorThread);
     if (commentPairs.size() > result.size()) {
       result = commentPairs;
     }
-
 
     if (result.size() == 0) {
       result.add(new Pair<>("00:00:00", name));
     }
 
     return result;
-  }
-
-  //MongoDBHelper.getInstance().writeComparePairResult(id, descPairs, chaptersPairs, jsonData);
-
-  private static void doJob(List<String> links) {
-
-    for (String videoLink : links) {
-
-      String id = getIdFromLink(pathToYoutubedl, videoLink);
-      String name = getFileName(pathToYoutubedl, id);
-      deleteAndCreateFolder(outFolder + "\\" + id);
-      downloadJson(pathToYoutubedl, id, outFolder, name);
-
-      File audioFile = downloadFile(pathToYoutubedl, id, outFolder, name);
-      try {
-        checkAudioFile(audioFile);
-//        convertFromM4atoAac(audioFile.getAbsolutePath(), outFolder, "new.aac");
-        //     audioFile = new File(audioFile.getAbsolutePath() + ".aac");
-        //     checkAudioFile(audioFile);
-      } catch (FileNotFoundException e) {
-        e.printStackTrace();
-        System.err.println(e);
-      }
-
-//
-      String jsonData = readJsonFile(outFolder, id);
-      String duration = getTimeFromJson(jsonData);
-      ArrayList<Pair<String, String>> pairs = getPairs(videoLink, jsonData, name);
-
-
-      //    File newAudioFile = getAudioFile(id, outFolder, name);
-      ArrayList<String> cutFiles = cutFileByPairs(audioFile, pairs, duration);
-
-      uploadFileInGoogleDrive(Arrays.asList("Audio"), name, cutFiles);
-    }
   }
 
   public static void checkAudioFile(File file) throws FileNotFoundException {
@@ -170,6 +305,27 @@ public class Main {
     return result;
   }
 
+  private static String getAudioFilePathFromJsonFile(String pathToJsonFile) {
+    String result = "";
+
+    try {
+      Path path = Paths.get(pathToJsonFile);
+      String audioFilePath = String.join("", Files.readAllLines(path));
+      JSONObject jsonObject = new JSONObject(audioFilePath);
+      result = jsonObject.getString("_filename");
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return result;
+  }
+
+  private static String getAudioFileNameFromJsonData(String jsonData) {
+    String result;
+    JSONObject jsonObject = new JSONObject(jsonData);
+    result = jsonObject.getString("_filename");
+    return result;
+  }
+
   private static File getAudioFile(String id, String outFolder, String name) {
 
     File description = new File(outFolder + "\\" + id);
@@ -195,43 +351,15 @@ public class Main {
     return null;
   }
 
-  private static String getIdFromLink(String pathToYoutubedl, String link) {
-
-    String result = "";
+  private static String getIdFromLink(String pathToYoutubedl, String link, ExecutorService inputThread,
+      ExecutorService errorThread) {
 
     String commandPath = pathToYoutubedl
         + " --get-id "
         + link;
-
-    try {
-      Runtime runtime = Runtime.getRuntime();
-      Process command = runtime.exec(commandPath);
-      int executionCode = command.waitFor();
-      System.out.println("executionCode = " + executionCode);
-
-      BufferedReader stdInput = new BufferedReader(new
-          InputStreamReader(command.getInputStream()));
-
-      String line;
-      while ((line = stdInput.readLine()) != null) {
-        result = line;
-      }
-      stdInput.close();
-      stdInput = new BufferedReader(new
-          InputStreamReader(command.getErrorStream()));
-
-      while ((line = stdInput.readLine()) != null) {
-        System.err.println(line);
-      }
-      stdInput.close();
-
-    } catch (IOException | InterruptedException e) {
-      e.printStackTrace();
-      System.out.println(e);
-    }
+    String result = executeFunctionAndGetStringOutput(commandPath, inputThread, errorThread)[0];
 
     return result;
-
   }
 
 
@@ -301,60 +429,44 @@ public class Main {
     return "";
   }
 
-  private static String[] executeFunctionAndGetStringOutput(String stringCommand) {
-
-    return executeFunctionAndGetStringOutput(stringCommand, true, false);
+  private static String[] executeFunctionAndGetStringOutput(String stringCommand, ExecutorService inputThread,
+      ExecutorService errorThread) {
+    return executeFunctionAndGetStringOutputSync(stringCommand, inputThread, errorThread).get(0).toArray(new String[0]);
   }
 
+  private static ArrayList<List<String>> executeFunctionAndGetStringOutputSync(String stringCommand,
+      ExecutorService inputThread, ExecutorService errorThread) {
 
-  private static String[] executeFunctionAndGetStringOutputSync(String stringCommand, boolean isReturnGood,
-      boolean isReturnError, ExecutorService inputThread, ExecutorService errorThread) {
-
-    List<String> result = new CopyOnWriteArrayList<>();
+    ArrayList<List<String>> result = new ArrayList<>();
+    for (int i = 0; i < 2; i++) {
+      result.add(Collections.emptyList());
+    }
     CountDownLatch countDownLatch = new CountDownLatch(2);
 
     try {
       Runtime runtime = Runtime.getRuntime();
       Process command = runtime.exec(stringCommand);
 
-      inputThread.execute(new Runnable() {
-        @Override
-        public void run() {
-          System.out.println("nameThreadWithInput " + stringCommand + " " + Thread.currentThread().getName());
-          String line;
-          try {
-            if (isReturnGood) {
-              BufferedReader stdInput = new BufferedReader(new
-                  InputStreamReader(command.getInputStream()));
-              while ((line = stdInput.readLine()) != null) {
-                System.out.println(line);
-                result.add(line);
-              }
-              stdInput.close();
-            }
-          } catch (IOException e) {
-            e.printStackTrace();
-          }
-          countDownLatch.countDown();
+      inputThread.execute(() -> {
+        try {
+          InputStream inputString = command.getInputStream();
+          List<String> resultInputString = getStringsFromInputStream(inputString);
+          inputString.close();
+          result.set(0, resultInputString);
+        } catch (IOException e) {
+          e.printStackTrace();
         }
+        countDownLatch.countDown();
       });
 
       errorThread.execute(new Runnable() {
         @Override
         public void run() {
-          System.out.println("nameThreadWithError " + stringCommand + " " + Thread.currentThread().getName());
-          String line;
-
           try {
-            if (isReturnError) {
-              BufferedReader stdInput = new BufferedReader(new
-                  InputStreamReader(command.getErrorStream()));
-              while ((line = stdInput.readLine()) != null) {
-                System.err.println(line);
-                result.add(line);
-              }
-              stdInput.close();
-            }
+            InputStream inputString = command.getErrorStream();
+            List<String> resultInputString = getStringsFromInputStream(inputString);
+            inputString.close();
+            result.set(1, resultInputString);
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -376,63 +488,31 @@ public class Main {
     }
 
     Objects.requireNonNull(result);
+    assert result.size() == 2;
 
-    String[] massResult = new String[result.size()];
-
-    return result.toArray(massResult);
+    return result;
   }
 
-  private static String[] executeFunctionAndGetStringOutput(String stringCommand, boolean isReturnGood,
-      boolean isReturnError) {
+  private static List<String> getStringsFromInputStream(InputStream inputStream) {
 
-    ArrayList<String> result = new ArrayList<>();
-    CountDownLatch countDownLatch = new CountDownLatch(2);
+    String line;
+    List<String> result = new ArrayList<>();
     try {
-      Runtime runtime = Runtime.getRuntime();
-      Process command = runtime.exec(stringCommand);
-
-      int executionCode = command.waitFor();
-      System.out.println("executionCode = " + executionCode);
-
-      BufferedReader stdInput = new BufferedReader(new
-          InputStreamReader(command.getInputStream()));
-
-      String line;
-
-      if (isReturnGood) {
-        while ((line = stdInput.readLine()) != null) {
-          System.out.println(line);
-          result.add(line);
-        }
-        stdInput.close();
+      Reader inputStreamReader = new InputStreamReader(inputStream);
+      BufferedReader stdInput = new BufferedReader(inputStreamReader);
+      while ((line = stdInput.readLine()) != null) {
+        result.add(line);
       }
-
-      if (isReturnError) {
-        BufferedReader errInput = new BufferedReader(new
-            InputStreamReader(command.getErrorStream()));
-
-        while ((line = errInput.readLine()) != null) {
-          System.err.println(line);
-          result.add(line);
-        }
-        errInput.close();
-      }
-
-
-    } catch (IOException | InterruptedException e) {
+    } catch (IOException e) {
       e.printStackTrace();
-      System.err.println(e);
-
     }
 
-    Objects.requireNonNull(result);
+    return result;
 
-    String[] massResult = new String[result.size()];
-
-    return result.toArray(massResult);
   }
 
-  private static String getFileName(String pathToYoutubedl, String id) {
+  private static String getFileName(String pathToYoutubedl, String id, ExecutorService inputThread,
+      ExecutorService errorThread) {
 
     String commandPath = pathToYoutubedl
         + " -f bestaudio --get-filename "
@@ -440,25 +520,29 @@ public class Main {
         + " %(title)s "
         + id;
 
-    System.out.println("commandPath = " + commandPath);
-    String[] outputResult = executeFunctionAndGetStringOutput(commandPath);
+    String[] outputResult = executeFunctionAndGetStringOutput(commandPath, inputThread, errorThread);
     return outputResult[0];
   }
 
-  private static void deleteAndCreateFolder(String pathToFolder) {
+  private static File deleteAndCreateFolder(String pathToFolder, String audioFilePath) {
 
     File file = new File(pathToFolder);
     if (file.exists()) {
       for (File listFile : file.listFiles()) {
+        if (listFile.getName().equals(audioFilePath)) {
+          System.out.println("We found file");
+          continue;
+        }
         listFile.delete();
       }
     }
     file.delete();
     file.mkdir();
-
+    return file;
   }
 
-  private static File downloadFile(String pathToYoutubedl, String id, String saveFolder, String name) {
+  private static File downloadFile(String pathToYoutubedl, String id, String saveFolder, String name,
+      ExecutorService inputThread, ExecutorService errorThread) {
 
     //String pathFile = saveFolder + id + "\\" + name;
 
@@ -468,14 +552,15 @@ public class Main {
         //+ " \"" + pathFile + "\" "
         //+ " -q "
         //    + " --no-warnings "
-
         + " --no-progress "
-        + " --write-info-json "
+        //+ " --write-info-json "
         + id;
 
     System.out.println("commandPath = " + commandPath);
-    String[] outputResult = executeFunctionAndGetStringOutput(commandPath);
-    for (String s : outputResult) {
+    ArrayList<List<String>> outputResult = executeFunctionAndGetStringOutputSync(commandPath, inputThread, errorThread);
+    System.out.println("outputResult = " + outputResult);
+    String[] standardOutputResult = outputResult.get(0).toArray(new String[0]);
+    for (String s : standardOutputResult) {
       final String downloadString = "[download]";
       if (s.startsWith(downloadString)) {
         int firstPoint = s.indexOf(downloadString) + downloadString.length();
@@ -492,29 +577,65 @@ public class Main {
     return null;
   }
 
-  private static void downloadJson(String pathToYoutubedl, String id, String saveFolder, String name) {
-//>youtube-dl.exe
-
-    //        + " \"\"" + saveFolder + "%(id)s\\\\%(title)s.%(ext)s\"\" "
+  private static String downloadJsonInFile(String pathToYoutubedl, String id, String saveFolder, String name,
+      ExecutorService inputThread, ExecutorService errorThread) {
 
     String commandPath = pathToYoutubedl
-        + " --skip-download  -f bestaudio -o "
-        + " \"" + saveFolder + "%(id)s\\" + name + ".%(ext)s\" "
-        + " -q --no-warnings --write-info-json "
+        + " --skip-download  -f bestaudio "
+        + "  -o \"" + saveFolder + "%(id)s\\" + name + ".%(ext)s\" "
+        + "  --write-info-json "
         + id;
 
     System.out.println("commandPath = " + commandPath);
-    executeFunctionAndGetStringOutput(commandPath);
+    ArrayList<List<String>> result = executeFunctionAndGetStringOutputSync(commandPath, inputThread, errorThread);
 
+    System.out.println("result = " + result);
+
+    String errorJsonWriteString = "ERROR: Cannot write metadata to JSON file ";
+    List<String> errorOutput = result.get(1);
+    if (!errorOutput.isEmpty()) {
+      for (String s : errorOutput) {
+        if (s.startsWith(errorJsonWriteString)) {
+          return s.substring(errorJsonWriteString.length());
+        }
+      }
+    }
+
+    String standardWritingVideoDescriptionMetadata = "[info] Writing video description metadata as JSON to: ";
+
+    List<String> standardOutput = result.get(0);
+    if (!standardOutput.isEmpty()) {
+      for (String s : standardOutput) {
+        if (s.startsWith(standardWritingVideoDescriptionMetadata)) {
+          return s.substring(standardWritingVideoDescriptionMetadata.length());
+        }
+      }
+    }
+    return "";
   }
 
+  private static String downloadJsonInMemory(String pathToYoutubedl, String id, String name,
+      ExecutorService inputThread, ExecutorService errorThread) {
+
+    String commandPath = pathToYoutubedl
+        + " --skip-download  -f bestaudio "
+        + "  -o \"" + name + ".%(ext)s\" "
+        + "  --print-json "
+        + id;
+
+    System.out.println("commandPath = " + commandPath);
+    ArrayList<List<String>> result = executeFunctionAndGetStringOutputSync(commandPath, inputThread, errorThread);
+    System.out.println("result = " + result);
+
+    List<String> standardOutput = result.get(0);
+    return standardOutput.get(0);
+  }
+
+
   private static ArrayList<String> cutFileByPairs(File audioFile, ArrayList<Pair<String, String>> pairs,
-      String duration) {
+      String duration, ExecutorService inputThread, ExecutorService errorThread) {
 
     ArrayList<String> result = new ArrayList<>();
-
-    ExecutorService inputThread = Executors.newSingleThreadExecutor();
-    ExecutorService errorThread = Executors.newSingleThreadExecutor();
 
     for (int i = 0; i < pairs.size(); i++) {
 
@@ -529,11 +650,9 @@ public class Main {
       String fileName = pairs.get(i).getValue().trim();
       fileName = makeGoodString(fileName);
 
-      String audioOutName = (audioFile.getParent() + "\\" + fileName);
-      audioOutName += ".mp4";
+      String audioOutName = (audioFile.getParent() + File.separator + fileName) + ".mp4";
 
       String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe "
-
           + " -loglevel debug "
           //   + " -y "
           + " -i " + "\"" + audioFile.getAbsolutePath() + "\"" + " "
@@ -543,10 +662,13 @@ public class Main {
 
       System.out.println("commandPath = " + commandPath);
 
-      String[] executeResult = executeFunctionAndGetStringOutputSync(commandPath, true, true, inputThread, errorThread);
+      ArrayList<List<String>> executeResult = executeFunctionAndGetStringOutputSync(commandPath, inputThread,
+          errorThread);
 
-      audioOutName = getFileNameFromFfmpegCut(executeResult);
+      String[] error = executeResult.get(1).toArray(new String[0]);
 
+      audioOutName = getFileNameFromFfmpegCut(error);
+      System.out.println("audioOutName = " + audioOutName);
       File file = new File(audioOutName);
       if (!file.exists()) {
         System.out.println("audioOutName = " + audioOutName);
@@ -557,15 +679,12 @@ public class Main {
 
     }
 
-    inputThread.shutdown();
-    errorThread.shutdown();
-
     return result;
   }
 
   private static String getFileNameFromFfmpegCut(String[] executeResult) {
 
-    String result = null;
+    String result = "";
 
     for (String s : executeResult) {
       if (s.startsWith("Output #0")) {

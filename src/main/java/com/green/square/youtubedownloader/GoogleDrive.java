@@ -1,3 +1,5 @@
+package com.green.square.youtubedownloader;
+
 import com.google.api.client.auth.oauth2.Credential;
 import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
 import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
@@ -11,6 +13,7 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.Drive.Files;
+import com.google.api.services.drive.Drive.Files.Get;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
@@ -199,11 +202,6 @@ public class GoogleDrive {
     }
     return parentId;
 
-//    for (FolderStructure file : files) {
-//      deleteFileById(file.getId());
-//    }
-//    List<String> parents = files.get(0).getParents();
-
   }
 
   public Pair<Boolean, List<FolderStructure>> createFolderWithParents(String name, String parent) {
@@ -238,10 +236,10 @@ public class GoogleDrive {
   // 0AO1Vdj22FnXeUk9PVA
   public String getRootId() {
     try {
-      File file = service.files()
+      Get qwe = service.files()
           .get("root")
-          .setFields("id, name")
-          .execute();
+          .setFields("id, name");
+      File file = qwe.execute();
 
       return file.getId();
     } catch (IOException e) {

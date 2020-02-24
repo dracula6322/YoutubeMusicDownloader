@@ -1,3 +1,5 @@
+package com.green.square.youtubedownloader;
+
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
@@ -19,10 +21,16 @@ public class MongoDBHelper {
   }
 
   public MongoDBHelper() {
+    checkIfExisting();
+  }
+
+  public boolean checkIfExisting(){
     try {
       mongoClient = new MongoClient();
+      return true;
     } catch (UnknownHostException e) {
       e.printStackTrace();
+      return false;
     }
   }
 
@@ -30,7 +38,7 @@ public class MongoDBHelper {
       ArrayList<Pair<String, String>> descPairs,
       ArrayList<Pair<String, String>> chaptersPairs, String json) {
 
-    DB YoutubeDownloader = mongoClient.getDB("YoutubeDownloader");
+    DB YoutubeDownloader = mongoClient.getDB("com.green.square.youtubedownloader.YoutubeDownloader");
     DBCollection descParsing = YoutubeDownloader.getCollection("descParsing");
     DBCollection descParsingResult = descParsing.getCollection("descParsingResult");
     DBCollection collectionId = descParsingResult.getCollection(id);

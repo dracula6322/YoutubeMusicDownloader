@@ -1,3 +1,5 @@
+package com.green.square.youtubedownloader;
+
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
@@ -7,33 +9,26 @@ import com.google.api.services.youtube.model.CommentThreadListResponse;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nonnull;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-public class YoutubeController {
+public class YoutubeAPIController {
 
-  private static YoutubeController ourInstance = new YoutubeController();
+  private static YoutubeAPIController ourInstance = new YoutubeAPIController();
 
-  public static YoutubeController getInstance() {
+  public static YoutubeAPIController getInstance() {
     return ourInstance;
   }
 
-  public YoutubeController() {
+  public YoutubeAPIController() {
   }
 
   private static final String DEVELOPER_KEY = "AIzaSyDdsYhIbGJlsHX5xdIElhZtcwq8p-2ghaE";
   private static final String APPLICATION_NAME = "API code samples";
   private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
-
-
-  public YouTube getService() throws GeneralSecurityException, IOException {
-    final NetHttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
-    return new YouTube.Builder(httpTransport, JSON_FACTORY, null)
-        .setApplicationName(APPLICATION_NAME)
-        .build();
-  }
 
   public List<String> getComments(String idVideo){
 
@@ -44,10 +39,17 @@ public class YoutubeController {
       e.printStackTrace();
     }
 
-    return null;
+    return Collections.emptyList();
   }
 
-  public String getCommentThreads(String idVideo) throws GeneralSecurityException, IOException {
+  private YouTube getService() throws GeneralSecurityException, IOException {
+    final NetHttpTransport httpTransport = GoogleNetHttpTransport.newTrustedTransport();
+    return new YouTube.Builder(httpTransport, JSON_FACTORY, null)
+        .setApplicationName(APPLICATION_NAME)
+        .build();
+  }
+
+  private String getCommentThreads(String idVideo) throws GeneralSecurityException, IOException {
     YouTube youtubeService = getService();
     // Define and execute the API request
     YouTube.CommentThreads.List request = youtubeService.commentThreads()
