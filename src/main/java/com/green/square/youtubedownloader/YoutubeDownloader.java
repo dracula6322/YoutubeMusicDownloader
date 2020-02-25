@@ -1,9 +1,9 @@
 package com.green.square.youtubedownloader;
 
 import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.CommandArgumentsResult;
-
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.commons.lang3.SystemUtils;
 
 public class YoutubeDownloader {
 
@@ -13,12 +13,27 @@ public class YoutubeDownloader {
 
   public static void getMusic(String[] args) {
 
-    String outFolder = "/home/andrey/youtubeNew/";
-    String pathToYoutubedl = "/usr/local/bin/youtube-dl";
-    String linkId = "https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s";
+    String outFolder;
+    String pathToYoutubedl;
+    String linkId;
+    String ffmpegPath;
+
+    if (SystemUtils.IS_OS_LINUX) {
+      outFolder = "/home/andrey/youtubeNew/";
+      pathToYoutubedl = "/usr/local/bin/youtube-dl";
+      linkId = "https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s";
+      ffmpegPath = "ffmpeg ";
+    } else {
+      outFolder = "C:\\youtubeNew\\";
+      pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe";
+      linkId = "https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s";
+      ffmpegPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe";
+
+    }
 
     CommandArgumentsResult defaultArguments = new CommandArgumentsResult(pathToYoutubedl, outFolder, linkId);
-    CommandArgumentsResult arguments = YoutubeDownloaderAndCutter.getInstance().parsingArguments(args, defaultArguments);
+    CommandArgumentsResult arguments = YoutubeDownloaderAndCutter.getInstance()
+        .parsingArguments(args, defaultArguments);
 
     System.out.println("arguments = " + arguments);
 
@@ -32,10 +47,9 @@ public class YoutubeDownloader {
 //    links.add("https://www.youtube.com/watch?v=Q7tIqEgRwJY");
 //    links.add("https://www.youtube.com/watch?v=dljzZqD3RnU");
 
-    YoutubeDownloaderAndCutter.getInstance().downloadAndCutMusic(pathToYoutubedl, outFolder, links);
+    YoutubeDownloaderAndCutter.getInstance().downloadAndCutMusic(pathToYoutubedl, outFolder, links, ffmpegPath);
 
   }
-
 
 
 }

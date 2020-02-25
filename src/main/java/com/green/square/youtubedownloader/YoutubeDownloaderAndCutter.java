@@ -47,7 +47,7 @@ public class YoutubeDownloaderAndCutter {
   }
 
   public void downloadAndCutMusic(String pathToYoutubedl, String outFolder,
-      List<String> links) {
+      List<String> links, String ffmpegPath) {
 
     ArrayList<String> ids = new ArrayList<>();
 
@@ -116,7 +116,7 @@ public class YoutubeDownloaderAndCutter {
         }
 
         //File newAudioFile = getAudioFile(id, outFolder, name);
-        ArrayList<String> cutFiles = cutFileByPairs(downloadedAudioFile, pairs, duration, inputThread, errorThread);
+        ArrayList<String> cutFiles = cutFileByPairs(ffmpegPath, downloadedAudioFile, pairs, duration, inputThread, errorThread);
 
         //uploadFileInGoogleDrive(Arrays.asList("Audio"), name, cutFiles);
       } catch (FileNotFoundException e) {
@@ -532,7 +532,7 @@ public class YoutubeDownloaderAndCutter {
   }
 
 
-  private ArrayList<String> cutFileByPairs(File audioFile, ArrayList<Pair<String, String>> pairs,
+  private ArrayList<String> cutFileByPairs(String ffmpegPath, File audioFile, ArrayList<Pair<String, String>> pairs,
       String duration, ExecutorService inputThread, ExecutorService errorThread) {
 
     ArrayList<String> result = new ArrayList<>();
@@ -552,7 +552,7 @@ public class YoutubeDownloaderAndCutter {
 
       String audioOutName = (audioFile.getParent() + File.separator + fileName) + ".mp4";
 
-      String commandPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe "
+      String commandPath = ffmpegPath
           + " -loglevel debug "
           //   + " -y "
           + " -i " + "\"" + audioFile.getAbsolutePath() + "\"" + " "
