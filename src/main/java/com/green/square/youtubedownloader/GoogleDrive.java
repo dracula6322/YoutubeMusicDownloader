@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import javafx.util.Pair;
 
 public class GoogleDrive {
 
@@ -186,19 +185,19 @@ public class GoogleDrive {
       }
       files = getFilesByFolderName(subFolderName, parentId);
 
-      if (files.getKey()) {
+      if (files.first) {
         //createFolderWithParents(subList.get(subList.size() - 1), files.getValue().get(0).parents);
-        parentId = files.getValue().get(0).getId();
+        parentId = files.second.get(0).getId();
       } else {
         files = createFolderWithParents(subFolderName, parentId);
-        parentId = files.getValue().get(0).getId();
+        parentId = files.second.get(0).getId();
       }
     }
     files = getFilesByFolderName(folderName, parentId);
-    if (files.getKey()) {
-      parentId = files.getValue().get(0).getId();
+    if (files.first) {
+      parentId = files.second.get(0).getId();
     } else {
-      parentId = createFolderWithParents(folderName, parentId).getValue().get(0).getId();
+      parentId = createFolderWithParents(folderName, parentId).second.get(0).getId();
     }
     return parentId;
 

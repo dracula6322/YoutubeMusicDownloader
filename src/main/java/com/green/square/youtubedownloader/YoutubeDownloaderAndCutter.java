@@ -115,7 +115,7 @@ public class YoutubeDownloaderAndCutter {
           System.out.println("pair = " + pair);
         }
 
-        File newAudioFile = getAudioFile(id, outFolder, name);
+        //File newAudioFile = getAudioFile(id, outFolder, name);
         ArrayList<String> cutFiles = cutFileByPairs(downloadedAudioFile, pairs, duration, inputThread, errorThread);
 
         //uploadFileInGoogleDrive(Arrays.asList("Audio"), name, cutFiles);
@@ -490,7 +490,7 @@ public class YoutubeDownloaderAndCutter {
         //+ " \"" + pathFile + "\" "
         //+ " -q "
         //    + " --no-warnings "
-        + " --no-progress -v "
+        + " --no-progress -v --no-cache-dir --rm-cache-dir  --no-continue  "
         //+ " --write-info-json "
         + id;
 

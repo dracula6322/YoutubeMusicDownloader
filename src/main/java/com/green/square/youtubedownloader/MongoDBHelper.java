@@ -8,7 +8,6 @@ import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import javafx.util.Pair;
 
 public class MongoDBHelper {
 
