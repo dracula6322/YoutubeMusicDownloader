@@ -1,9 +1,10 @@
 package com.green.square.youtubedownloader;
 
 import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.CommandArgumentsResult;
+import org.apache.commons.lang3.SystemUtils;
+
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.commons.lang3.SystemUtils;
 
 public class YoutubeDownloader {
 
