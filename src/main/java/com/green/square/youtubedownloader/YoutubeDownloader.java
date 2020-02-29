@@ -55,11 +55,11 @@ public class YoutubeDownloader {
 
 //        ExecutorService inputThread = Executors.newSingleThreadExecutor();
 //        ExecutorService errorThread = Executors.newSingleThreadExecutor();
+//        //String command = "/usr/local/bin/youtube-dl --get-id https://www.youtube.com/watch?v=ffLbdhP0auc&t=1535s & wait";
 //
-//        String[] command = {"bash", "-c", "ffmpeg  -loglevel debug  -y  -i /home/andrey/youtubeNew/VnQ52zzyWMY/original_VnQ52zzyWMY.webm  -ss 00:04:05  -to 00:04:59   /home/andrey/\"поглаживание мягкими рукавчиками.mp4\""};
-//        String env = "FILE_NAME=Sdamp4";
+//        String command = "/usr/local/bin/youtube-dl --skip-download  -f bestaudio   -o \"original_%(id)s.%(ext)s\"   --print-json VnQ52zzyWMY & wait";
 //
-//        ArrayList<List<String>> result = YoutubeDownloaderAndCutter.getInstance().executeFunctionAndGetStringOutputSyncWithRootDirWithEnv(command, "/", new String[]{env}, inputThread, errorThread);
+//        ArrayList<List<String>> result = YoutubeDownloaderAndCutter.getInstance().executeFunctionAndGetStringOutput(command, "/", new String[]{}, inputThread, errorThread);
 //        System.out.println("result = " + result);
 //
 //
