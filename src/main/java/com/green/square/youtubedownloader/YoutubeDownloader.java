@@ -44,9 +44,9 @@ public class YoutubeDownloader {
 
     List<String> links = new ArrayList<>();
     links.add("https://www.youtube.com/watch?v=VnQ52zzyWMY");
-//    links.add("https://www.youtube.com/watch?v=ffLbdhP0auc&t=1535s");
-//    links.add("https://www.youtube.com/watch?v=Q7tIqEgRwJY");
-//    links.add("https://www.youtube.com/watch?v=dljzZqD3RnU");
+    links.add("https://www.youtube.com/watch?v=ffLbdhP0auc&t=1535s");
+    links.add("https://www.youtube.com/watch?v=Q7tIqEgRwJY");
+    links.add("https://www.youtube.com/watch?v=dljzZqD3RnU");
 
     YoutubeDownloaderAndCutter.getInstance().downloadAndCutMusic(pathToYoutubedl, outFolder, links, ffmpegPath);
 
