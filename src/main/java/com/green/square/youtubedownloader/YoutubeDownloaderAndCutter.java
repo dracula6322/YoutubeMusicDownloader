@@ -122,11 +122,10 @@ public class YoutubeDownloaderAndCutter {
 
         System.out.println("cutFiles = " + cutFiles.toString());
 
-        if(cutFiles.size() == pairs.size()){
+        if (cutFiles.size() == pairs.size()) {
           System.out.println("Good cut");
         } else {
           System.err.println("Bad cut");
-
         }
 
         //uploadFileInGoogleDrive(Arrays.asList("Audio"), name, cutFiles);
@@ -306,12 +305,16 @@ public class YoutubeDownloaderAndCutter {
   private String getIdFromLink(String pathToYoutubedl, String link, ExecutorService inputThread,
       ExecutorService errorThread) {
 
-    String commandPath = pathToYoutubedl
-        + " --get-id "
-        + link;
-    String result = executeFunctionAndGetStringOutput(commandPath, inputThread, errorThread)[0];
+    String commandPath = pathToYoutubedl;
+//        + " --get-id "
+//        + link;
+    ArrayList<List<String>> result = executeFunctionAndGetStringOutputSyncWithRootDirWithEnv(commandPath, "",
+        new String[]{"--get-id= " + link},
+        inputThread, errorThread);
+    System.out.println("result = " + result);
+    //.get(0).get(0);
 
-    return result;
+    return null;
   }
 
 
@@ -366,6 +369,66 @@ public class YoutubeDownloaderAndCutter {
         command = runtime.exec(stringCommand, new String[]{}, new File(rootDir));
       }
 
+      inputThread.execute(() -> {
+        try {
+          InputStream inputString = command.getInputStream();
+          List<String> resultInputString = getStringsFromInputStream(inputString);
+          inputString.close();
+          result.set(0, resultInputString);
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
+        countDownLatch.countDown();
+      });
+
+      errorThread.execute(() -> {
+        try {
+          InputStream inputString = command.getErrorStream();
+          List<String> resultInputString = getStringsFromInputStream(inputString);
+          inputString.close();
+          result.set(1, resultInputString);
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
+        countDownLatch.countDown();
+      });
+      int executionCode = command.waitFor();
+      System.out.println("executionCode = " + executionCode);
+
+    } catch (IOException | InterruptedException e) {
+      e.printStackTrace();
+      System.err.println(e);
+    }
+
+    try {
+      countDownLatch.await();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }
+
+    Objects.requireNonNull(result);
+    assert result.size() == 2;
+
+    return result;
+  }
+
+  private ArrayList<List<String>> executeFunctionAndGetStringOutputSyncWithRootDirWithEnv(String stringCommand,
+      String rootDir, String[] env, ExecutorService inputThread, ExecutorService errorThread) {
+
+    ArrayList<List<String>> result = new ArrayList<>();
+    for (int i = 0; i < 2; i++) {
+      result.add(Collections.emptyList());
+    }
+    CountDownLatch countDownLatch = new CountDownLatch(2);
+
+    try {
+      Runtime runtime = Runtime.getRuntime();
+      Process command;
+      if (TextUtils.isEmpty(rootDir)) {
+        command = runtime.exec(stringCommand, env);
+      } else {
+        command = runtime.exec(stringCommand, env, new File(rootDir));
+      }
       inputThread.execute(() -> {
         try {
           InputStream inputString = command.getInputStream();
