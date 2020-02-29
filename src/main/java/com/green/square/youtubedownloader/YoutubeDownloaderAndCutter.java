@@ -129,6 +129,10 @@ public class YoutubeDownloaderAndCutter {
                     for (int i = 0; i < cutFiles.size(); i++) {
                         if (cutFiles.get(i).contains(pairs.get(i).second))
                             goodCount++;
+                        else {
+                            System.err.println(cutFiles.get(i));
+                            System.err.println(pairs.get(i).second);
+                        }
                     }
                     System.out.println("Good cut " + goodCount + "/" + pairs.size());
                 } else {
