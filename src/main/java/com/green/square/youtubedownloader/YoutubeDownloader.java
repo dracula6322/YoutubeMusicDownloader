@@ -24,7 +24,7 @@ public class YoutubeDownloader {
       outFolder = "/home/andrey/youtubeNew/";
       pathToYoutubedl = "/usr/local/bin/youtube-dl";
       linkId = "https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s";
-      ffmpegPath = "/usr/bin/ffmpeg ";
+      ffmpegPath = "/usr/bin/ffmpeg";
     } else {
       outFolder = "C:\\youtubeNew\\";
       pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe";
@@ -53,15 +53,19 @@ public class YoutubeDownloader {
 
 //    ExecutorService inputThread = Executors.newSingleThreadExecutor();
 //    ExecutorService errorThread = Executors.newSingleThreadExecutor();
-//    //String command = "/usr/local/bin/youtube-dl --get-id https://www.youtube.com/watch?v=ffLbdhP0auc&t=1535s & wait";
+//    String command = "/usr/local/bin/youtube-dl --get-id https://www.youtube.com/watch?v=ffLbdhP0auc&t=1535s & wait";
+
+//    String[] command = {"/usr/local/bin/youtube-dl",
+//        "--get-id","https://www.youtube.com/watch?v=VnQ52zzyWMY", "& wait"};
 //
-//    String[] command = {"C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe",
-//        "--get-id"," https://www.youtube.com/watch?v=VnQ52zzyWMY"};
-//
+//    ArrayList<String> commandArray = new ArrayList<>();
+//    commandArray.add("/usr/local/bin/youtube-dl");
+//    commandArray.add("--get-id");
+//    commandArray.add("https://www.youtube.com/watch?v=VnQ52zzyWMY");
 //
 //
 //    ArrayList<List<String>> result = YoutubeDownloaderAndCutter.getInstance()
-//        .executeFunctionAndGetStringOutput(command, "", new String[]{}, inputThread, errorThread);
+//        .executeFunctionAndGetStringOutput(commandArray.toArray(new String[0]), "", new String[]{}, inputThread, errorThread);
 //    System.out.println("result = " + result);
 //
 //    inputThread.shutdown();
