@@ -1,38 +1,62 @@
 plugins {
+    id 'org.springframework.boot' version '2.2.6.RELEASE'
+    id 'io.spring.dependency-management' version '1.0.9.RELEASE'
     id 'java'
 }
 
-group 'org.example'
+group 'com.green.square'
 version '1.0-SNAPSHOT'
-
-sourceCompatibility = 1.8
+sourceCompatibility = '11'
 
 repositories {
     mavenCentral()
     jcenter()
+    maven { url "https://oss.sonatype.org/content/repositories/snapshots" }
+}
+
+ext {
+    set('vaadinVersion', "14.1.25")
 }
 
 dependencies {
+
+    implementation 'org.projectlombok:lombok:1.18.12'
+    annotationProcessor 'org.projectlombok:lombok:1.18.12'
+    implementation 'org.mongodb:mongo-java-driver:2.13.3'
+    implementation 'org.mongodb:mongodb-driver-sync:3.11.0'
+    implementation 'joda-time:joda-time:2.10.5'
+    implementation "org.json:json:20190722"
+    implementation 'commons-cli:commons-cli:1.4'
+    implementation 'org.apache.commons:commons-lang3:3.9'
+
+    implementation 'com.google.apis:google-api-services-youtube:v3-rev212-1.25.0'
+    implementation "io.reactivex.rxjava3:rxjava:3.0.0"
+
+    implementation group: 'com.google.guava', name: 'guava', version: '23.6-jre'
+
+    implementation 'com.google.api-client:google-api-client:1.23.0'
+    //implementation 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
+    implementation 'com.google.apis:google-api-services-drive:v3-rev110-1.23.0'
+    implementation 'joda-time:joda-time:2.10.5'
+
+    //implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'com.vaadin:vaadin-spring-boot-starter'
+    testImplementation('org.springframework.boot:spring-boot-starter-test') {
+        exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+    }
+
     testCompile group: 'junit', name: 'junit', version: '4.12'
+//    implementation 'javax.servlet:javax.servlet-api:3.1.0'
+}
 
-    compile 'com.google.api-client:google-api-client:1.23.0'
-    compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
-    compile 'com.google.apis:google-api-services-drive:v3-rev110-1.23.0'
-    compile 'org.mongodb:mongo-java-driver:2.13.3'
-    compile 'org.mongodb:mongodb-driver-sync:3.11.0'
-    compile 'joda-time:joda-time:2.10.5'
-    compile "org.json:json:20190722"
-    compile 'commons-cli:commons-cli:1.4'
-    // https://mvnrepository.com/artifact/org.apache.commons/commons-lang3
-    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.9'
+dependencyManagement {
+    imports {
+        mavenBom 'com.vaadin:vaadin-bom:14.0.9'
+    }
+}
 
 
 
-    compile group: 'org.apache.httpcomponents', name: 'httpcore', version: '4.4.8'
-    compile group: 'com.google.guava', name: 'guava', version: '23.6-jre'
-
-    compile 'com.google.api-client:google-api-client:1.23.0'
-    compile 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
-    compile 'com.google.apis:google-api-services-youtube:v3-rev212-1.25.0'
-
+test {
+    useJUnitPlatform()
 }

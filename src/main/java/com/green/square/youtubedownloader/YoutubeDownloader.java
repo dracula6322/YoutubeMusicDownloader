@@ -1,11 +1,10 @@
 package com.green.square.youtubedownloader;
 
-import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.CommandArgumentsResult;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import org.apache.commons.lang3.SystemUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class YoutubeDownloader {
 
@@ -15,6 +14,28 @@ public class YoutubeDownloader {
 
   public static void getMusic(String[] args) {
 
+    Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
+
+    CommandArgumentsResult arguments = getDefaultArguments(args, logger);
+
+    String outFolder = arguments.outputFolderPath;
+    String pathToYoutubedl = arguments.pathToYoutubedl;
+    String linkId = arguments.linkId;
+    String ffmpegPath = arguments.ffmpegPath;
+
+    logger.debug("pathToYoutubedl = " + pathToYoutubedl);
+    logger.error("outFolder = " + outFolder);
+    logger.debug("linkId = " + linkId);
+    logger.debug("ffmpegPath = " + ffmpegPath);
+
+    List<String> links = new ArrayList<>();
+    links.add(linkId);
+
+    YoutubeDownloaderAndCutter.getInstance().downloadAndCutMusic(pathToYoutubedl, outFolder, links, ffmpegPath, logger);
+  }
+
+  public static CommandArgumentsResult getDefaultArguments(String[] args, Logger logger) {
+
     String outFolder;
     String pathToYoutubedl;
     String linkId;
@@ -23,53 +44,19 @@ public class YoutubeDownloader {
     if (SystemUtils.IS_OS_LINUX) {
       outFolder = "/home/andrey/youtubeNew/";
       pathToYoutubedl = "/usr/local/bin/youtube-dl";
-      linkId = "https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s";
       ffmpegPath = "/usr/bin/ffmpeg";
     } else {
       outFolder = "C:\\youtubeNew\\";
       pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe";
-      linkId = "https://www.youtube.com/watch?v=xULTMMgwLuo&t=1784s";
       ffmpegPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe";
-
     }
 
-    CommandArgumentsResult defaultArguments = new CommandArgumentsResult(pathToYoutubedl, outFolder, linkId);
-    CommandArgumentsResult arguments = YoutubeDownloaderAndCutter.getInstance()
-        .parsingArguments(args, defaultArguments);
+    linkId = "https://www.youtube.com/watch?v=ignvgjJwzGk";
 
-    System.out.println("arguments = " + arguments);
+    CommandArgumentsResult defaultArguments = new CommandArgumentsResult(pathToYoutubedl, outFolder, linkId,
+        ffmpegPath);
+    return YoutubeDownloaderAndCutter.getInstance().parsingArguments(args, defaultArguments, logger);
 
-    outFolder = arguments.outputFolderPath;
-    pathToYoutubedl = arguments.pathToYoutubedl;
-    linkId = arguments.linkId;
-
-    List<String> links = new ArrayList<>();
-    links.add("https://www.youtube.com/watch?v=VnQ52zzyWMY");
-//    links.add("https://www.youtube.com/watch?v=ffLbdhP0auc&t=1535s");
-//    links.add("https://www.youtube.com/watch?v=Q7tIqEgRwJY");
-//    links.add("https://www.youtube.com/watch?v=dljzZqD3RnU");
-
-      YoutubeDownloaderAndCutter.getInstance().downloadAndCutMusic(pathToYoutubedl, outFolder, links, ffmpegPath);
-
-//    ExecutorService inputThread = Executors.newSingleThreadExecutor();
-//    ExecutorService errorThread = Executors.newSingleThreadExecutor();
-//    String command = "/usr/local/bin/youtube-dl --get-id https://www.youtube.com/watch?v=ffLbdhP0auc&t=1535s & wait";
-
-//    String[] command = {"/usr/local/bin/youtube-dl",
-//        "--get-id","https://www.youtube.com/watch?v=VnQ52zzyWMY", "& wait"};
-//
-//    ArrayList<String> commandArray = new ArrayList<>();
-//    commandArray.add("/usr/local/bin/youtube-dl");
-//    commandArray.add("--get-id");
-//    commandArray.add("https://www.youtube.com/watch?v=VnQ52zzyWMY");
-//
-//
-//    ArrayList<List<String>> result = YoutubeDownloaderAndCutter.getInstance()
-//        .executeFunctionAndGetStringOutput(commandArray.toArray(new String[0]), "", new String[]{}, inputThread, errorThread);
-//    System.out.println("result = " + result);
-//
-//    inputThread.shutdown();
-//    errorThread.shutdown();
   }
 
 }
