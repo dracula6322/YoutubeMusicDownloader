@@ -13,12 +13,12 @@ import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.make
 
 import com.green.square.youtubedownloader.CommandArgumentsResult;
 import com.green.square.youtubedownloader.YoutubeDownloader;
-import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.DetachEvent;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.Grid.SelectionMode;
@@ -30,14 +30,17 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.function.ValueProvider;
 import com.vaadin.flow.router.Route;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import org.apache.http.util.TextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,26 +48,29 @@ import org.slf4j.LoggerFactory;
 public class MainView extends VerticalLayout {
 
   Grid<CutValue> grid = new Grid<>();
-  Button cutFile = new Button("Cut chosen file");
-  String idVideo = "";
+  Button cutFile = new Button("Cut chosen file as zip");
   String jsonDataGlobal = "";
 
-  ExecutorService inputThread;
-  ExecutorService errorThread;
+  ExecutorService inputThread = Executors.newFixedThreadPool(2);
+  ;
+  ExecutorService errorThread = Executors.newFixedThreadPool(2);
+  ;
   Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
+  CommandArgumentsResult arguments;
+  String videoId = "";
+
 
   @Override
   protected void onAttach(AttachEvent attachEvent) {
     super.onAttach(attachEvent);
-    errorThread = Executors.newSingleThreadExecutor();
-    inputThread = Executors.newSingleThreadExecutor();
+
+    arguments = getDefaultArguments(new String[]{}, logger);
+
   }
 
   @Override
   protected void onDetach(DetachEvent detachEvent) {
     super.onDetach(detachEvent);
-    inputThread.shutdown();
-    errorThread.shutdown();
   }
 
   public MainView() {
@@ -76,72 +82,59 @@ public class MainView extends VerticalLayout {
     add(youtubeLink);
 
     Button getChapters = new Button("GetChapters");
+    getChapters.setDisableOnClick(true);
     getChapters.addClickListener(new ComponentEventListener<ClickEvent<Button>>() {
       @Override
       public void onComponentEvent(ClickEvent<Button> event) {
+
+        if (youtubeLink.isEmpty()) {
+          Notification.show("Enter url");
+          return;
+        }
+
         String url = youtubeLink.getValue();
-
-        String[] args = new String[]{"--" + YoutubeDownloaderAndCutter.linkIdOptionsName, url};
-
-        CommandArgumentsResult arguments = getDefaultArguments(args, logger);
+        arguments = arguments.toBuilder().linkId(url).build();
         String id = getIdFromLink(arguments.pathToYoutubedl, url, inputThread, errorThread, logger);
-        idVideo = id;
-
+        videoId = id;
         String jsonData = downloadJsonInMemory(arguments.pathToYoutubedl, id, inputThread, errorThread, logger);
         logger.info("jsonData = " + jsonData);
-        jsonDataGlobal = jsonData;
         String audioFileName = getAudioFileNameFromJsonData(jsonData);
         String duration = getTimeFromJson(jsonData);
         ArrayList<CutValue> pairs = getPairsVersion2(id, jsonData, audioFileName, duration);
 
-        Grid<CutValue> newGrid = getGridView(pairs);
+        jsonDataGlobal = jsonData;
+
+        Grid<CutValue> newGrid = getGridView(pairs, id);
         remove(cutFile);
         remove(grid);
         add(newGrid);
         add(cutFile);
         grid = newGrid;
+        getChapters.setEnabled(true);
       }
     });
 
     cutFile.addClickListener(new ComponentEventListener<ClickEvent<Button>>() {
       @Override
       public void onComponentEvent(ClickEvent<Button> event) {
-        Set<CutValue> selectedItemsSet = grid.getSelectedItems();
-        if (selectedItemsSet == null || selectedItemsSet.size() == 0) {
-          Notification.show("Files not selected");
+        ArrayList<File> cutFiles = downloadMultipleCut(jsonDataGlobal, grid.getSelectedItems(), videoId);
+        if (cutFiles == null || cutFiles.isEmpty()) {
+          System.out.println("cutFiles.isEmpty() = ");
           return;
         }
-        ArrayList<CutValue> selectedItemsArrayList = new ArrayList<>(selectedItemsSet);
-        String[] args = new String[]{};
-        CommandArgumentsResult arguments = getDefaultArguments(args, logger);
-
-        String audioFileName = getAudioFileNameFromJsonData(jsonDataGlobal);
-        logger.info("audioFileName = " + audioFileName);
-        audioFileName = makeGoodString(audioFileName);
-        logger.info("audioFileName = " + audioFileName);
-        String pathToYoutubeFolder = arguments.outputFolderPath + File.separator + idVideo + File.separator;
-        logger.info("pathToYoutubeFolder = " + pathToYoutubeFolder);
-
-        Path path = Paths.get(pathToYoutubeFolder + audioFileName);
-        logger.info("path = " + path.toString());
-        File downloadedAudioFile;
-        boolean downloadedFileIsExists = Files.exists(path);
-        if (downloadedFileIsExists) {
-          logger.debug("File exists and don't need download it");
-          downloadedAudioFile = path.toFile();
-        } else {
-          logger.debug("File not exists");
-          File createdFolder = deleteAndCreateFolder(pathToYoutubeFolder, audioFileName,
-              logger);
-
-          downloadedAudioFile = downloadFile(arguments.pathToYoutubedl, idVideo, pathToYoutubeFolder, inputThread,
-              errorThread, logger, "original_%(id)s.%(ext)s");
-          logger.debug("downloadedAudioFile = " + downloadedAudioFile);
+        try {
+          String saveFolder = cutFiles.get(0).getParent();
+          System.out.println("saveFolder = " + saveFolder);
+          File zipFile = GreetingController
+              .zip(cutFiles, saveFolder, "tmpZipFile" + UUID.randomUUID().toString() + ".zip");
+          System.out.println("zipFile.getAbsolutePath() = " + zipFile.getAbsolutePath());
+          ArrayList<File> filesArrayList = new ArrayList<>();
+          filesArrayList.add(zipFile);
+          startDownloadFile(filesArrayList, getUI(), logger, videoId);
+        } catch (IOException e) {
+          e.printStackTrace();
+          logger.error(e.getMessage());
         }
-
-        ArrayList<String> files = cutFileByCutValueVersion2(arguments.ffmpegPath, downloadedAudioFile,
-            selectedItemsArrayList, inputThread, errorThread, pathToYoutubeFolder, logger);
-
 
       }
     });
@@ -151,23 +144,85 @@ public class MainView extends VerticalLayout {
     add(cutFile);
   }
 
-  public static Grid<CutValue> getGridView(ArrayList<CutValue> values) {
+  public ArrayList<File> downloadMultipleCut(String jsonData, Set<CutValue> selectedItemsSet, String videoId) {
+    if (selectedItemsSet == null || selectedItemsSet.size() == 0) {
+      Notification.show("Files not selected");
+      return new ArrayList<>();
+    }
+    ArrayList<CutValue> selectedItemsArrayList = new ArrayList<>(selectedItemsSet);
+    String audioFileName = getAudioFileNameFromJsonData(jsonData);
+    logger.info("audioFileName = " + audioFileName);
+    audioFileName = makeGoodString(audioFileName);
+    logger.info("audioFileName = " + audioFileName);
+    String pathToYoutubeFolder = arguments.outputFolderPath + videoId + File.separator;
+    logger.info("pathToYoutubeFolder = " + pathToYoutubeFolder);
+    Path path = Paths.get(pathToYoutubeFolder + audioFileName);
+    logger.info("path = " + path.toString());
+    File downloadedAudioFile;
+    boolean downloadedFileIsExists = Files.exists(path);
+    if (downloadedFileIsExists) {
+      logger.debug("File exists and don't need to download it");
+      downloadedAudioFile = path.toFile();
+    } else {
+      logger.debug("File not exists");
+      File createdFolder = deleteAndCreateFolder(pathToYoutubeFolder, audioFileName, logger);
+      downloadedAudioFile = downloadFile(arguments.pathToYoutubedl, arguments.getLinkId(),
+          createdFolder.getAbsolutePath(), inputThread, errorThread, logger, "original_%(id)s.%(ext)s");
+      logger.debug("downloadedAudioFile = " + downloadedAudioFile);
+    }
+
+    ArrayList<File> files = cutFileByCutValueVersion2(arguments.ffmpegPath, downloadedAudioFile,
+        selectedItemsArrayList, inputThread, errorThread, pathToYoutubeFolder, logger);
+    logger.info("files = " + files);
+
+    return files;
+  }
+
+  public Grid<CutValue> getGridView(ArrayList<CutValue> values, String id) {
     Grid<CutValue> grid = new Grid<>(CutValue.class);
+
+    ArrayList<CutValue> newArray = new ArrayList<>();
+
+    for (CutValue value : values) {
+      String hashName = GreetingController.getHashNameFile(value.title);
+      value = value.toBuilder().hashName(hashName).build();
+      newArray.add(value);
+    }
+    values = newArray;
 
     grid.setSelectionMode(SelectionMode.MULTI);
     grid.setItems(values);
     grid.addComponentColumn(new ValueProvider<CutValue, Component>() {
       @Override
       public Component apply(CutValue cutValue) {
-
         Button button = new Button(new Icon(VaadinIcon.DOWNLOAD));
-//        button.addClickListener(click ->
-//            Notification.show("Clicked: " + cutValue.toString()));
+        button.addClickListener(new ComponentEventListener<ClickEvent<Button>>() {
+          @Override
+          public void onComponentEvent(ClickEvent<Button> event) {
+
+            Set<CutValue> cutValueSet = new HashSet<>();
+            cutValueSet.add(cutValue);
+            ArrayList<File> files = downloadMultipleCut(jsonDataGlobal, cutValueSet, videoId);
+            startDownloadFile(files, getUI(), logger, videoId);
+          }
+        });
         return button;
       }
     });
 
     return grid;
+  }
+
+  public static void startDownloadFile(ArrayList<File> files, Optional<UI> ui, Logger logger, String id) {
+
+    if (files.size() == 1) {
+      if (ui.isPresent()) {
+        String hashName = GreetingController.getHashNameFile(files.get(0).getName());
+        ui.get().getPage().open(String.format("http://localhost:8080/files/%s/%s", id, hashName));
+      } else {
+        logger.info("Something wrong " + files.toString());
+      }
+    }
   }
 
 }

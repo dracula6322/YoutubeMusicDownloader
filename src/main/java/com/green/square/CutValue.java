@@ -1,9 +1,13 @@
 package com.green.square;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NonNull;
 
+@AllArgsConstructor
 @Data
+@Builder(toBuilder = true)
 public class CutValue {
 
   @NonNull
@@ -12,9 +16,9 @@ public class CutValue {
   String startTime;
   @NonNull
   String endTime;
-  @NonNull
   long startTimeInSecond;
-  @NonNull
   long endTimeInSecond;
+
+  String hashName = "";
 
 }

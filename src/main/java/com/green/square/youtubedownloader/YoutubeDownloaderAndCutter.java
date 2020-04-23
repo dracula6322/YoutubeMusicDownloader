@@ -349,7 +349,7 @@ public class YoutubeDownloaderAndCutter {
 
     logger.info(command.toString());
     Pair<Integer, ArrayList<List<String>>> result = executeFunctionAndGetStringOutputWithResult(
-        command.toArray(new String[0]), "", inputThread, errorThread);
+        command.toArray(new String[0]), "", inputThread, errorThread, logger);
     if (result.first == 0) {
       logger.debug("result = " + result);
     } else {
@@ -387,8 +387,8 @@ public class YoutubeDownloaderAndCutter {
   }
 
   public static Pair<Integer, ArrayList<List<String>>> executeFunctionAndGetStringOutputWithResult(
-      String[] stringCommandArray,
-      String rootDir, ExecutorService inputThread, ExecutorService errorThread) {
+      String[] stringCommandArray, String rootDir, ExecutorService inputThread, ExecutorService errorThread,
+      Logger logger) {
 
     ArrayList<String> commandArray = new ArrayList<>(Arrays.asList(stringCommandArray));
     int executionCode = -1;
@@ -409,7 +409,7 @@ public class YoutubeDownloaderAndCutter {
       inputThread.execute(() -> {
         try {
           InputStream inputString = command.getInputStream();
-          List<String> resultInputString = getStringsFromInputStream(inputString);
+          List<String> resultInputString = getStringsFromInputStream(inputString, logger);
           inputString.close();
           result.set(0, resultInputString);
         } catch (IOException e) {
@@ -421,7 +421,7 @@ public class YoutubeDownloaderAndCutter {
       errorThread.execute(() -> {
         try {
           InputStream inputString = command.getErrorStream();
-          List<String> resultInputString = getStringsFromInputStream(inputString);
+          List<String> resultInputString = getStringsFromInputStream(inputString, logger);
           inputString.close();
           result.set(1, resultInputString);
         } catch (IOException e) {
@@ -433,7 +433,7 @@ public class YoutubeDownloaderAndCutter {
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
-      System.err.println(e);
+      logger.error(e.getMessage());
     }
 
     try {
@@ -443,12 +443,14 @@ public class YoutubeDownloaderAndCutter {
     }
 
     Objects.requireNonNull(result);
-    assert result.size() == 2;
+    if (result.size() != 2) {
+      logger.error("Concurrent error in mass");
+    }
 
     return new Pair<>(executionCode, result);
   }
 
-  private static List<String> getStringsFromInputStream(InputStream inputStream) {
+  private static List<String> getStringsFromInputStream(InputStream inputStream, Logger logger) {
 
     String line;
     List<String> result = new ArrayList<>();
@@ -456,6 +458,7 @@ public class YoutubeDownloaderAndCutter {
       Reader inputStreamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
       BufferedReader stdInput = new BufferedReader(inputStreamReader);
       while ((line = stdInput.readLine()) != null) {
+        logger.info(line);
         result.add(line);
       }
     } catch (IOException e) {
@@ -510,7 +513,7 @@ public class YoutubeDownloaderAndCutter {
 
     //logger.debug("commandPath = " + commandPath);
     Pair<Integer, ArrayList<List<String>>> outputResult = executeFunctionAndGetStringOutputWithResult(
-        command.toArray(new String[0]), rootDirPath, inputThread, errorThread);
+        command.toArray(new String[0]), rootDirPath, inputThread, errorThread, logger);
     if (outputResult.first == 0) {
       logger.debug("result = " + outputResult);
     } else {
@@ -552,9 +555,7 @@ public class YoutubeDownloaderAndCutter {
     logger.debug("commandPath = " + commandArray.toString());
 
     Pair<Integer, ArrayList<List<String>>> result = executeFunctionAndGetStringOutputWithResult(
-        commandArray.toArray(new String[0]), "",
-        inputThread,
-        errorThread);
+        commandArray.toArray(new String[0]), "", inputThread, errorThread, logger);
     if (result.first == 0) {
       logger.debug("result = " + result);
     } else {
@@ -580,9 +581,7 @@ public class YoutubeDownloaderAndCutter {
     logger.info("commandPath = " + commandArray.toString());
 
     Pair<Integer, ArrayList<List<String>>> result = executeFunctionAndGetStringOutputWithResult(
-        commandArray.toArray(new String[0]), "",
-        inputThread,
-        errorThread);
+        commandArray.toArray(new String[0]), "", inputThread, errorThread, logger);
     if (result.first == 0) {
       logger.debug("result = " + result);
     } else {
@@ -616,7 +615,7 @@ public class YoutubeDownloaderAndCutter {
       ArrayList<String> commandArray = new ArrayList<>();
       commandArray.add(ffmpegPath);
       // commandArray.add(" -loglevel debug");
-      commandArray.add("-y");
+      commandArray.add("-n");
       commandArray.add("-i");
       commandArray.add(audioFile.getAbsolutePath());
       commandArray.add("-ss");
@@ -636,7 +635,7 @@ public class YoutubeDownloaderAndCutter {
       commandArray.add(outputFilePath);
 
       Pair<Integer, ArrayList<List<String>>> executionResult = executeFunctionAndGetStringOutputWithResult(
-          commandArray.toArray(new String[0]), rootDirPath, inputThread, errorThread);
+          commandArray.toArray(new String[0]), rootDirPath, inputThread, errorThread, logger);
       if (executionResult.first == 0) {
         logger.debug("result = " + result);
       } else {
@@ -650,6 +649,11 @@ public class YoutubeDownloaderAndCutter {
       if (SystemUtils.IS_OS_LINUX) {
         audioOutName = pathToYoutubeFolder + audioOutName;
       }
+      if (audioOutName.isEmpty()) {
+        logger.info("audioOutName.isEmpty()");
+        audioOutName = outputFilePath;
+      }
+
       logger.debug("audioOutName = " + audioOutName);
       File file = new File(audioOutName);
       if (!file.exists()) {
@@ -686,7 +690,7 @@ public class YoutubeDownloaderAndCutter {
       ArrayList<String> commandArray = new ArrayList<>();
       commandArray.add(ffmpegPath);
       // commandArray.add(" -loglevel debug");
-      commandArray.add("-y");
+      commandArray.add("-n");
       commandArray.add("-i");
       commandArray.add(audioFile.getAbsolutePath());
       commandArray.add("-ss");
@@ -706,7 +710,7 @@ public class YoutubeDownloaderAndCutter {
       commandArray.add(outputFilePath);
 
       Pair<Integer, ArrayList<List<String>>> executionResult = executeFunctionAndGetStringOutputWithResult(
-          commandArray.toArray(new String[0]), rootDirPath, inputThread, errorThread);
+          commandArray.toArray(new String[0]), rootDirPath, inputThread, errorThread, logger);
       if (executionResult.first == 0) {
         logger.debug("result = " + result);
       } else {
@@ -717,8 +721,13 @@ public class YoutubeDownloaderAndCutter {
       String[] error = executionResult.second.get(1).toArray(new String[0]);
 
       String audioOutName = getFileNameFromFfmpegCut(error);
+
       if (SystemUtils.IS_OS_LINUX) {
         audioOutName = pathToYoutubeFolder + audioOutName;
+      }
+      if (audioOutName.isEmpty()) {
+        logger.info("audioOutName.isEmpty()");
+        audioOutName = outputFilePath;
       }
       logger.debug("audioOutName = " + audioOutName);
       File file = new File(audioOutName);
@@ -733,11 +742,11 @@ public class YoutubeDownloaderAndCutter {
     return result;
   }
 
-  public static ArrayList<String> cutFileByCutValueVersion2(String ffmpegPath, File audioFile,
+  public static ArrayList<File> cutFileByCutValueVersion2(String ffmpegPath, File audioFile,
       ArrayList<CutValue> pairs, ExecutorService inputThread, ExecutorService errorThread, String pathToYoutubeFolder,
       Logger logger) {
 
-    ArrayList<String> result = new ArrayList<>();
+    ArrayList<File> result = new ArrayList<>();
 
     for (int i = 0; i < pairs.size(); i++) {
 
@@ -750,7 +759,7 @@ public class YoutubeDownloaderAndCutter {
       ArrayList<String> commandArray = new ArrayList<>();
       commandArray.add(ffmpegPath);
 //      Replace file flag
-//      commandArray.add("-y");
+      commandArray.add("-n");
       commandArray.add("-i");
       commandArray.add(audioFile.getAbsolutePath());
       commandArray.add("-ss");
@@ -768,9 +777,10 @@ public class YoutubeDownloaderAndCutter {
         rootDirPath = "";
       }
       commandArray.add(outputFilePath);
-
-      Pair<Integer, ArrayList<List<String>>> executionResult = executeFunctionAndGetStringOutputWithResult(
-          commandArray.toArray(new String[0]), rootDirPath, inputThread, errorThread);
+      String[] program = commandArray.toArray(new String[0]);
+      logger.info("Run " + Arrays.toString(program));
+      Pair<Integer, ArrayList<List<String>>> executionResult = executeFunctionAndGetStringOutputWithResult(program,
+          rootDirPath, inputThread, errorThread, logger);
       if (executionResult.first == 0) {
         logger.debug("result = " + result);
       } else {
@@ -784,16 +794,18 @@ public class YoutubeDownloaderAndCutter {
       if (SystemUtils.IS_OS_LINUX) {
         audioOutName = pathToYoutubeFolder + audioOutName;
       }
+      if (audioOutName.isEmpty()) {
+        logger.info("audioOutName.isEmpty()");
+        audioOutName = outputFilePath;
+      }
       logger.debug("audioOutName = " + audioOutName);
       File file = new File(audioOutName);
       if (!file.exists()) {
         logger.error("audioOutName = " + audioOutName);
       } else {
-        result.add(audioOutName);
+        result.add(file);
       }
-
     }
-
     return result;
   }
 
@@ -866,7 +878,15 @@ public class YoutubeDownloaderAndCutter {
 
       title = makeGoodString(title);
 
-      pairs.add(new CutValue(title, dtStr, endTimeString, startTimeInSeconds, endTimeInSeconds));
+      CutValue cutValue = CutValue.builder()
+          .title(title)
+          .startTime(dtStr)
+          .endTime(endTimeString)
+          .startTimeInSecond(startTimeInSeconds)
+          .endTimeInSecond(endTimeInSeconds)
+          .build();
+
+      pairs.add(cutValue);
     }
 
 //    pairs.sort((o1, o2) -> {
@@ -880,7 +900,16 @@ public class YoutubeDownloaderAndCutter {
     DateTime dt = new DateTime(0, DateTimeZone.UTC);
     dt = dt.plusSeconds(durationInSecond);
     String output = DateTimeFormat.forPattern("HH:mm:ss").print(dt);
-    pairs.add(new CutValue("full_original", "00:00:00", output, 0, durationInSecond));
+
+    CutValue cutValue = CutValue.builder()
+        .title("full_original")
+        .startTime("00:00:00")
+        .endTime(output)
+        .startTimeInSecond(0)
+        .endTimeInSecond(durationInSecond)
+        .build();
+
+    pairs.add(cutValue);
     return pairs;
   }
 
@@ -1007,7 +1036,7 @@ public class YoutubeDownloaderAndCutter {
           e.printStackTrace();
         }
 
-        cutValues.add(new CutValue(goodLine, goodTime, "", timeInSecond, Long.MIN_VALUE));
+        cutValues.add(new CutValue(goodLine, goodTime, "", timeInSecond, Long.MIN_VALUE, ""));
         //pairs.add(new Pair<>(goodTime, goodLine));
 
       } while (firstPoint != -1);
@@ -1040,7 +1069,7 @@ public class YoutubeDownloaderAndCutter {
       }
       cutValues.get(i).setEndTimeInSecond(timeInSecond);
     }
-    cutValues.add(new CutValue("full_original", "00:00:00", output, 0, durationInSecond));
+    cutValues.add(new CutValue("full_original", "00:00:00", output, 0, durationInSecond, ""));
 
 //    pairs.sort((o1, o2) -> {
 //      DateTimeFormatter pattern = DateTimeFormat.forPattern("HH:mm:ss");

@@ -68,11 +68,19 @@ public class GreetingController extends HttpServlet {
     for (File file : files) {
       JSONObject item = new JSONObject();
       item.put("name", file.getName());
-      item.put("base64", DigestUtils.md5DigestAsHex((file.getName() + file.length()).getBytes(StandardCharsets.UTF_8)));
+      item.put("base64", getHashNameFile(file.getName()));
       filesJsonArrays.put(item);
     }
     result.put("files", filesJsonArrays);
     return result.toString();
+  }
+
+  public static String getHashNameFile(String fileName) {
+    return DigestUtils.md5DigestAsHex((fileName).getBytes(StandardCharsets.UTF_8));
+  }
+
+  public static String getFileNameWithOutExtension(String fileName) {
+    return fileName.replaceFirst("[.][^.]+$", "");
   }
 
   @RequestMapping(value = "/files/{filePath}/{hashNameFile}", method = RequestMethod.GET)
@@ -80,7 +88,6 @@ public class GreetingController extends HttpServlet {
       HttpServletResponse response) throws IOException {
 
     downloadFile(hashNameFile, filePath, response);
-
   }
 
   @RequestMapping(value = "/files/all/{filePath}", method = RequestMethod.GET)
@@ -100,7 +107,12 @@ public class GreetingController extends HttpServlet {
 
     Objects.requireNonNull(folder.listFiles());
 
-    File file = zip(Arrays.asList(folder.listFiles()), "test.zip");
+    File file = null;
+    try {
+      file = zip(Arrays.asList(folder.listFiles()), folder.getAbsolutePath(), "test.zip");
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
 
     try {
       System.out.println("\"We start\" = " + "We start");
@@ -119,8 +131,8 @@ public class GreetingController extends HttpServlet {
 
   }
 
-  public static File zip(List<File> files, String filename) {
-    File zipfile = new File(filename);
+  public static File zip(List<File> files, String zipFolderPath, String filename) throws IOException {
+    File zipfile = new File(zipFolderPath, filename);
     // Create a buffer for reading the files
     byte[] buf = new byte[1024];
     try {
@@ -161,8 +173,7 @@ public class GreetingController extends HttpServlet {
     Objects.requireNonNull(folder.listFiles());
 
     for (File file : folder.listFiles()) {
-      String localFileHashName = DigestUtils
-          .md5DigestAsHex((file.getName() + file.length()).getBytes(StandardCharsets.UTF_8));
+      String localFileHashName = getHashNameFile(file.getName());
       System.out.println("localFileHashName = " + localFileHashName);
       if (localFileHashName.equals(hashNameFile)) {
         //filePath = provide.getOutFolder() + filePath + File.separator + fileName;
