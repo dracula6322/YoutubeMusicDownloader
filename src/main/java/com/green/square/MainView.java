@@ -50,11 +50,8 @@ public class MainView extends VerticalLayout {
   Grid<CutValue> grid = new Grid<>();
   Button cutFile = new Button("Cut chosen file as zip");
   String jsonDataGlobal = "";
-
   ExecutorService inputThread = Executors.newFixedThreadPool(2);
-  ;
   ExecutorService errorThread = Executors.newFixedThreadPool(2);
-  ;
   Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
   CommandArgumentsResult arguments;
   String videoId = "";
@@ -63,7 +60,6 @@ public class MainView extends VerticalLayout {
   @Override
   protected void onAttach(AttachEvent attachEvent) {
     super.onAttach(attachEvent);
-
     arguments = getDefaultArguments(new String[]{}, logger);
 
   }

@@ -56,7 +56,6 @@ public class YoutubeDownloader {
     CommandArgumentsResult defaultArguments = new CommandArgumentsResult(pathToYoutubedl, outFolder, linkId,
         ffmpegPath);
     return YoutubeDownloaderAndCutter.getInstance().parsingArguments(args, defaultArguments, logger);
-
   }
 
 }

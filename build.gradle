@@ -2,11 +2,14 @@ plugins {
     id 'org.springframework.boot' version '2.2.6.RELEASE'
     id 'io.spring.dependency-management' version '1.0.9.RELEASE'
     id 'java'
+//    id 'com.vaadin' version '0.6.0'
+
 }
 
 group 'com.green.square'
 version '1.0-SNAPSHOT'
-sourceCompatibility = '11'
+
+sourceCompatibility = 1.8
 
 repositories {
     mavenCentral()
@@ -15,9 +18,8 @@ repositories {
 }
 
 ext {
-    set('vaadinVersion', "14.1.25")
+    set('vaadinVersion', "14.0.0.rc7")
 }
-
 dependencies {
 
     implementation 'org.projectlombok:lombok:1.18.12'
@@ -35,11 +37,9 @@ dependencies {
     implementation group: 'com.google.guava', name: 'guava', version: '23.6-jre'
 
     implementation 'com.google.api-client:google-api-client:1.23.0'
-    //implementation 'com.google.oauth-client:google-oauth-client-jetty:1.23.0'
-    implementation 'com.google.apis:google-api-services-drive:v3-rev110-1.23.0'
     implementation 'joda-time:joda-time:2.10.5'
 
-    //implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'com.vaadin:vaadin-spring-boot-starter'
     testImplementation('org.springframework.boot:spring-boot-starter-test') {
         exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
@@ -51,11 +51,9 @@ dependencies {
 
 dependencyManagement {
     imports {
-        mavenBom 'com.vaadin:vaadin-bom:14.0.9'
+        mavenBom 'com.vaadin:vaadin-bom:14.0.0.rc7'
     }
 }
-
-
 
 test {
     useJUnitPlatform()

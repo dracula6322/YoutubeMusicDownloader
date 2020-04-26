@@ -1,5 +1,9 @@
 package com.green.square;
 
+import static com.green.square.youtubedownloader.YoutubeDownloader.getDefaultArguments;
+
+import com.green.square.youtubedownloader.CommandArgumentsResult;
+import com.green.square.youtubedownloader.YoutubeDownloader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -19,7 +23,8 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.tomcat.util.http.fileupload.IOUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,22 +36,24 @@ public class GreetingController extends HttpServlet {
 
   ExecutorService downloadThread;
 
-  @Autowired
-  static public RestFileSystemConfiguration provide;
+  static public CommandArgumentsResult commandArgumentsResult;
 
-  public GreetingController(RestFileSystemConfiguration restFileSystemConfiguration) {
+  public GreetingController() {
 
-    this.provide = restFileSystemConfiguration;
-    System.out.println("fileSystemConfiguration = " + this.provide);
+    Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
+    this.commandArgumentsResult = getDefaultArguments(new String[0], logger);
+    System.out.println("fileSystemConfiguration = " + this.commandArgumentsResult);
     System.out.println("\"We are here\" = " + "We are here");
     downloadThread = Executors.newSingleThreadExecutor();
+
+
   }
 
   @RequestMapping(value = "/files/", method = RequestMethod.GET)
   public String getAllYoutubeFolders() {
 
     JSONObject result = new JSONObject();
-    File[] folders = FileManagerController.getInstance().getFilesByPath(provide.getOutFolder());
+    File[] folders = FileManagerController.getInstance().getFilesByPath(commandArgumentsResult.getOutputFolderPath());
     JSONArray foldersArray = new JSONArray();
     for (File folder : folders) {
       foldersArray.put(folder.getName());
@@ -62,7 +69,8 @@ public class GreetingController extends HttpServlet {
     System.out.println("filePath = " + filePath);
     JSONObject result = new JSONObject();
 
-    File[] files = FileManagerController.getInstance().getFilesByPath(provide.getOutFolder() + filePath);
+    File[] files = FileManagerController.getInstance()
+        .getFilesByPath(commandArgumentsResult.getOutputFolderPath() + filePath);
     result.put("filePath", filePath);
     JSONArray filesJsonArrays = new JSONArray();
     for (File file : files) {
@@ -99,7 +107,7 @@ public class GreetingController extends HttpServlet {
 
   public static void downloadAllFilesWithZip(String filePath, HttpServletResponse response) {
 
-    File folder = new File(provide.getOutFolder() + filePath + File.separator);
+    File folder = new File(commandArgumentsResult.getOutputFolderPath() + filePath + File.separator);
     if (folder.listFiles() == null) {
       System.out.println("\"1\" = " + "1");
       return;
@@ -133,26 +141,19 @@ public class GreetingController extends HttpServlet {
 
   public static File zip(List<File> files, String zipFolderPath, String filename) throws IOException {
     File zipfile = new File(zipFolderPath, filename);
-    // Create a buffer for reading the files
     byte[] buf = new byte[1024];
     try {
-      // create the ZIP file
       ZipOutputStream out = new ZipOutputStream(new FileOutputStream(zipfile));
-      // compress the files
       for (int i = 0; i < files.size(); i++) {
         FileInputStream in = new FileInputStream(files.get(i).getAbsolutePath());
-        // add ZIP entry to output stream
         out.putNextEntry(new ZipEntry(files.get(i).getName()));
-        // transfer bytes from the file to the ZIP file
         int len;
         while ((len = in.read(buf)) > 0) {
           out.write(buf, 0, len);
         }
-        // complete the entry
         out.closeEntry();
         in.close();
       }
-      // complete the ZIP file
       out.close();
       return zipfile;
     } catch (IOException ex) {
@@ -164,7 +165,7 @@ public class GreetingController extends HttpServlet {
   public static void downloadFile(String hashNameFile, String filePath,
       HttpServletResponse response) throws IOException {
     System.out.println("hashNameFile = " + hashNameFile);
-    File folder = new File(provide.getOutFolder() + filePath + File.separator);
+    File folder = new File(commandArgumentsResult.getOutputFolderPath() + filePath + File.separator);
     if (folder.listFiles() == null) {
       System.out.println("\"1\" = " + "1");
       return;
