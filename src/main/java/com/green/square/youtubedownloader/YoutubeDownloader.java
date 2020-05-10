@@ -31,7 +31,8 @@ public class YoutubeDownloader {
     List<String> links = new ArrayList<>();
     links.add(linkId);
 
-    YoutubeDownloaderAndCutter.getInstance().downloadAndCutMusic(pathToYoutubedl, outFolder, links, ffmpegPath, logger);
+    YoutubeDownloaderAndCutter.getInstance()
+        .downloadAndCutMusicRxJavaStyleWithBuilder(pathToYoutubedl, outFolder, links, ffmpegPath, logger);
   }
 
   public static CommandArgumentsResult getDefaultArguments(String[] args, Logger logger) {

@@ -1,18 +1,19 @@
 package com.green.square;
 
 import static com.green.square.youtubedownloader.YoutubeDownloader.getDefaultArguments;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.cutFileByCutValueVersion2;
+import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.cutFileByCutValue;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.deleteAndCreateFolder;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.downloadFile;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.downloadJsonInMemory;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getAudioFileNameFromJsonData;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getIdFromLink;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getPairsVersion2;
+import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getPairs;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getTimeFromJson;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.makeGoodString;
 
 import com.green.square.youtubedownloader.CommandArgumentsResult;
 import com.green.square.youtubedownloader.YoutubeDownloader;
+import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.DownloadState;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.Component;
@@ -29,6 +30,12 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.function.ValueProvider;
 import com.vaadin.flow.router.Route;
+import io.reactivex.rxjava3.annotations.NonNull;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.core.SingleObserver;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.functions.Consumer;
+import io.reactivex.rxjava3.functions.Function;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,11 +43,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.apache.http.util.TextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,19 +58,17 @@ public class MainView extends VerticalLayout {
 
   Grid<CutValue> grid = new Grid<>();
   Button cutFile = new Button("Cut chosen file as zip");
-  String jsonDataGlobal = "";
   ExecutorService inputThread = Executors.newFixedThreadPool(2);
   ExecutorService errorThread = Executors.newFixedThreadPool(2);
   Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
-  CommandArgumentsResult arguments;
+  CommandArgumentsResult arguments = CommandArgumentsResult.builder().build();
   String videoId = "";
-
+  DownloadState currentDownloadState = DownloadState.builder().build();
 
   @Override
   protected void onAttach(AttachEvent attachEvent) {
     super.onAttach(attachEvent);
     arguments = getDefaultArguments(new String[]{}, logger);
-
   }
 
   @Override
@@ -84,28 +91,143 @@ public class MainView extends VerticalLayout {
       public void onComponentEvent(ClickEvent<Button> event) {
 
         if (youtubeLink.isEmpty()) {
-          Notification.show("Enter url");
+          Notification.show("Must enter url");
           return;
         }
 
         String url = youtubeLink.getValue();
         arguments = arguments.toBuilder().linkId(url).build();
-        String id = getIdFromLink(arguments.pathToYoutubedl, url, inputThread, errorThread, logger);
-        videoId = id;
-        String jsonData = downloadJsonInMemory(arguments.pathToYoutubedl, id, inputThread, errorThread, logger);
-        logger.info("jsonData = " + jsonData);
-        String audioFileName = getAudioFileNameFromJsonData(jsonData);
-        String duration = getTimeFromJson(jsonData);
-        ArrayList<CutValue> pairs = getPairsVersion2(id, jsonData, audioFileName, duration);
+        String id = getIdFromLink(arguments.pathToYoutubedl, arguments.getLinkId(), inputThread, errorThread, logger);
 
-        jsonDataGlobal = jsonData;
+        Single.just(id)
+            .doOnError(new Consumer<Throwable>() {
+              @Override
+              public void accept(Throwable throwable) throws Throwable {
+                logger.error("id is missing = " + id);
+              }
+            })
+            .doOnSuccess(new Consumer<String>() {
+              @Override
+              public void accept(String s) throws Throwable {
+                logger.info("id = " + s);
+              }
+            })
+            .map(new Function<String, DownloadState>() {
+              @Override
+              public DownloadState apply(String s) throws Throwable {
+                return DownloadState.builder().id(s).build();
+              }
+            })
+            .map(new Function<DownloadState, DownloadState>() {
+              @Override
+              public DownloadState apply(DownloadState downloadState) throws Throwable {
+                return DownloadState.builder()
+                    .json(downloadJsonInMemory(arguments.getPathToYoutubedl(), downloadState.getId(), inputThread,
+                        errorThread, logger))
+                    .build();
+              }
+            })
+            .doOnError(new Consumer<Throwable>() {
+              @Override
+              public void accept(Throwable throwable) throws Throwable {
+                logger.error("Error in json file");
+              }
+            })
+            .doOnSuccess(jsonData -> logger.debug("jsonData = " + jsonData))
+            .map(jsonData -> {
+              String audioFileName = getAudioFileNameFromJsonData(jsonData.getJson());
+              logger.debug("audioFileName = " + audioFileName);
+              return jsonData.toBuilder().audioFileName(audioFileName).build();
+            })
+            .map(audioFileName -> {
+              String goodString = makeGoodString(audioFileName.getAudioFileName());
+              return audioFileName.toBuilder().audioFileName(goodString).build();
+            })
+            .doOnSuccess(audioFileName -> {
+              if (TextUtils.isEmpty(audioFileName.getAudioFileName())) {
+                throw new NullPointerException();
+              }
+              logger.debug("goodAudioName = " + audioFileName);
+            })
+            .doOnSuccess(downloadState -> System.out.println("audioFileName = " + downloadState.getAudioFileName()))
+            .map(audioFileNameLocal -> {
+                  File folder = deleteAndCreateFolder(
+                      arguments.getOutputFolderPath() + File.separator + audioFileNameLocal.getId(),
+                      audioFileNameLocal.getAudioFileName(), logger);
+                  Objects.requireNonNull(folder);
+                  if (!folder.exists() && !folder.isDirectory()) {
+                    throw new NullPointerException();
+                  }
+                  return audioFileNameLocal.toBuilder().createdFolder(folder).build();
+                }
+            )
+            .map(createdFolder -> createdFolder.toBuilder()
+                .createdFolderPath(createdFolder.getCreatedFolder().getAbsolutePath() + File.separator).build())
+            .doOnSuccess(new Consumer<DownloadState>() {
+              @Override
+              public void accept(DownloadState pathToYoutubeFolder) throws Throwable {
+                logger.debug("pathToYoutubeFolder = " + pathToYoutubeFolder.getCreatedFolderPath());
+              }
+            })
+            .doOnSuccess(new Consumer<DownloadState>() {
+              @Override
+              public void accept(DownloadState s) throws Throwable {
+                if (!Paths.get(s.getCreatedFolderPath()).toFile().exists()) {
+                  throw new NullPointerException();
+                }
+              }
+            })
+            .map(new Function<DownloadState, DownloadState>() {
+              @Override
+              public DownloadState apply(DownloadState downloadState) throws Throwable {
+                String duration = getTimeFromJson(downloadState.getJson());
+                return downloadState.toBuilder().duration(duration).build();
+              }
+            })
+            .map(new Function<DownloadState, DownloadState>() {
+              @Override
+              public DownloadState apply(DownloadState downloadState) throws Throwable {
 
-        Grid<CutValue> newGrid = getGridView(pairs, id);
-        remove(cutFile);
-        remove(grid);
-        add(newGrid);
-        add(cutFile);
-        grid = newGrid;
+                ArrayList<CutValue> pairs = getPairs(downloadState.getId(), downloadState.getJson(),
+                    downloadState.getDuration());
+
+                for (CutValue pair : pairs) {
+                  logger.debug("pair = " + pair);
+                }
+                return downloadState.toBuilder().pairs(pairs).build();
+              }
+            })
+            .subscribe(new SingleObserver<DownloadState>() {
+              @Override
+              public void onSubscribe(@NonNull Disposable d) {
+                logger.info("onSubscribe");
+                logger.info(d.toString());
+              }
+
+              @Override
+              public void onSuccess(@NonNull DownloadState downloadState) {
+                logger.info("onSuccess");
+                logger.info(downloadState.toString());
+
+                currentDownloadState = downloadState;
+
+                Grid<CutValue> newGrid = getGridView(downloadState.getPairs(), downloadState.getId());
+                remove(cutFile);
+                remove(grid);
+                add(newGrid);
+                add(cutFile);
+                grid = newGrid;
+
+              }
+
+              @Override
+              public void onError(@NonNull Throwable e) {
+                logger.error("onError");
+                logger.error(e.getMessage());
+                e.printStackTrace();
+              }
+            });
+
         getChapters.setEnabled(true);
       }
     });
@@ -113,7 +235,8 @@ public class MainView extends VerticalLayout {
     cutFile.addClickListener(new ComponentEventListener<ClickEvent<Button>>() {
       @Override
       public void onComponentEvent(ClickEvent<Button> event) {
-        ArrayList<File> cutFiles = downloadMultipleCut(jsonDataGlobal, grid.getSelectedItems(), videoId);
+        ArrayList<File> cutFiles = downloadMultipleCut(currentDownloadState.getJson(), grid.getSelectedItems(),
+            videoId);
         if (cutFiles == null || cutFiles.isEmpty()) {
           System.out.println("cutFiles.isEmpty() = ");
           return;
@@ -167,7 +290,7 @@ public class MainView extends VerticalLayout {
       logger.debug("downloadedAudioFile = " + downloadedAudioFile);
     }
 
-    ArrayList<File> files = cutFileByCutValueVersion2(arguments.ffmpegPath, downloadedAudioFile,
+    ArrayList<File> files = cutFileByCutValue(arguments.ffmpegPath, downloadedAudioFile,
         selectedItemsArrayList, inputThread, errorThread, pathToYoutubeFolder, logger);
     logger.info("files = " + files);
 
@@ -198,7 +321,7 @@ public class MainView extends VerticalLayout {
 
             Set<CutValue> cutValueSet = new HashSet<>();
             cutValueSet.add(cutValue);
-            ArrayList<File> files = downloadMultipleCut(jsonDataGlobal, cutValueSet, videoId);
+            ArrayList<File> files = downloadMultipleCut(currentDownloadState.getId(), cutValueSet, videoId);
             startDownloadFile(files, getUI(), logger, videoId);
           }
         });
