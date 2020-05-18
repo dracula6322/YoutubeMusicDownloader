@@ -6,7 +6,6 @@ import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 
 public class MongoDBHelper {
@@ -23,14 +22,13 @@ public class MongoDBHelper {
     checkIfExisting();
   }
 
-  public boolean checkIfExisting(){
-    try {
-      mongoClient = new MongoClient();
-      return true;
-    } catch (UnknownHostException e) {
-      e.printStackTrace();
-      return false;
-    }
+  public boolean checkIfExisting() {
+    mongoClient = new MongoClient();
+    return true;
+  }
+
+  public void writeSomethink() {
+
   }
 
   public void writeComparePairResult(String id,

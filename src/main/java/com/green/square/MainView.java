@@ -4,16 +4,12 @@ import static com.green.square.youtubedownloader.YoutubeDownloader.getDefaultArg
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.cutFileByCutValue;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.deleteAndCreateFolder;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.downloadFile;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.downloadJsonInMemory;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getAudioFileNameFromJsonData;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getIdFromLink;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getPairs;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getTimeFromJson;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.makeGoodString;
 
 import com.green.square.youtubedownloader.CommandArgumentsResult;
 import com.green.square.youtubedownloader.YoutubeDownloader;
-import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.DownloadState;
+import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.Component;
@@ -34,8 +30,6 @@ import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.core.SingleObserver;
 import io.reactivex.rxjava3.disposables.Disposable;
-import io.reactivex.rxjava3.functions.Consumer;
-import io.reactivex.rxjava3.functions.Function;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -43,15 +37,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import org.apache.http.util.TextUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Route
 public class MainView extends VerticalLayout {
@@ -62,13 +55,20 @@ public class MainView extends VerticalLayout {
   ExecutorService errorThread = Executors.newFixedThreadPool(2);
   Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
   CommandArgumentsResult arguments = CommandArgumentsResult.builder().build();
-  String videoId = "";
   DownloadState currentDownloadState = DownloadState.builder().build();
+
+  @Autowired
+  public DownloadStateRepository downloadStateRepository;
+
+  @Autowired
+  YoutubeDownloaderAndCutter youtubeDownloaderAndCutter;
 
   @Override
   protected void onAttach(AttachEvent attachEvent) {
     super.onAttach(attachEvent);
     arguments = getDefaultArguments(new String[]{}, logger);
+    youtubeDownloaderAndCutter.saveDownloadState();
+
   }
 
   @Override
@@ -97,136 +97,44 @@ public class MainView extends VerticalLayout {
 
         String url = youtubeLink.getValue();
         arguments = arguments.toBuilder().linkId(url).build();
-        String id = getIdFromLink(arguments.pathToYoutubedl, arguments.getLinkId(), inputThread, errorThread, logger);
 
-        Single.just(id)
-            .doOnError(new Consumer<Throwable>() {
-              @Override
-              public void accept(Throwable throwable) throws Throwable {
-                logger.error("id is missing = " + id);
-              }
-            })
-            .doOnSuccess(new Consumer<String>() {
-              @Override
-              public void accept(String s) throws Throwable {
-                logger.info("id = " + s);
-              }
-            })
-            .map(new Function<String, DownloadState>() {
-              @Override
-              public DownloadState apply(String s) throws Throwable {
-                return DownloadState.builder().id(s).build();
-              }
-            })
-            .map(new Function<DownloadState, DownloadState>() {
-              @Override
-              public DownloadState apply(DownloadState downloadState) throws Throwable {
-                return DownloadState.builder()
-                    .json(downloadJsonInMemory(arguments.getPathToYoutubedl(), downloadState.getId(), inputThread,
-                        errorThread, logger))
-                    .build();
-              }
-            })
-            .doOnError(new Consumer<Throwable>() {
-              @Override
-              public void accept(Throwable throwable) throws Throwable {
-                logger.error("Error in json file");
-              }
-            })
-            .doOnSuccess(jsonData -> logger.debug("jsonData = " + jsonData))
-            .map(jsonData -> {
-              String audioFileName = getAudioFileNameFromJsonData(jsonData.getJson());
-              logger.debug("audioFileName = " + audioFileName);
-              return jsonData.toBuilder().audioFileName(audioFileName).build();
-            })
-            .map(audioFileName -> {
-              String goodString = makeGoodString(audioFileName.getAudioFileName());
-              return audioFileName.toBuilder().audioFileName(goodString).build();
-            })
-            .doOnSuccess(audioFileName -> {
-              if (TextUtils.isEmpty(audioFileName.getAudioFileName())) {
-                throw new NullPointerException();
-              }
-              logger.debug("goodAudioName = " + audioFileName);
-            })
-            .doOnSuccess(downloadState -> System.out.println("audioFileName = " + downloadState.getAudioFileName()))
-            .map(audioFileNameLocal -> {
-                  File folder = deleteAndCreateFolder(
-                      arguments.getOutputFolderPath() + File.separator + audioFileNameLocal.getId(),
-                      audioFileNameLocal.getAudioFileName(), logger);
-                  Objects.requireNonNull(folder);
-                  if (!folder.exists() && !folder.isDirectory()) {
-                    throw new NullPointerException();
-                  }
-                  return audioFileNameLocal.toBuilder().createdFolder(folder).build();
-                }
-            )
-            .map(createdFolder -> createdFolder.toBuilder()
-                .createdFolderPath(createdFolder.getCreatedFolder().getAbsolutePath() + File.separator).build())
-            .doOnSuccess(new Consumer<DownloadState>() {
-              @Override
-              public void accept(DownloadState pathToYoutubeFolder) throws Throwable {
-                logger.debug("pathToYoutubeFolder = " + pathToYoutubeFolder.getCreatedFolderPath());
-              }
-            })
-            .doOnSuccess(new Consumer<DownloadState>() {
-              @Override
-              public void accept(DownloadState s) throws Throwable {
-                if (!Paths.get(s.getCreatedFolderPath()).toFile().exists()) {
-                  throw new NullPointerException();
-                }
-              }
-            })
-            .map(new Function<DownloadState, DownloadState>() {
-              @Override
-              public DownloadState apply(DownloadState downloadState) throws Throwable {
-                String duration = getTimeFromJson(downloadState.getJson());
-                return downloadState.toBuilder().duration(duration).build();
-              }
-            })
-            .map(new Function<DownloadState, DownloadState>() {
-              @Override
-              public DownloadState apply(DownloadState downloadState) throws Throwable {
+        @NonNull Single<DownloadState> rxSinglePairs = youtubeDownloaderAndCutter
+            .getPairs(arguments.pathToYoutubedl, arguments.getLinkId(),
+                arguments.getOutputFolderPath(), inputThread, errorThread, logger);
 
-                ArrayList<CutValue> pairs = getPairs(downloadState.getId(), downloadState.getJson(),
-                    downloadState.getDuration());
+        rxSinglePairs.subscribe(new SingleObserver<DownloadState>() {
+          @Override
+          public void onSubscribe(@NonNull Disposable d) {
+            logger.info("onSubscribe");
+            logger.info(d.toString());
+          }
 
-                for (CutValue pair : pairs) {
-                  logger.debug("pair = " + pair);
-                }
-                return downloadState.toBuilder().pairs(pairs).build();
-              }
-            })
-            .subscribe(new SingleObserver<DownloadState>() {
-              @Override
-              public void onSubscribe(@NonNull Disposable d) {
-                logger.info("onSubscribe");
-                logger.info(d.toString());
-              }
+          @Override
+          public void onSuccess(@NonNull DownloadState downloadState) {
 
-              @Override
-              public void onSuccess(@NonNull DownloadState downloadState) {
-                logger.info("onSuccess");
-                logger.info(downloadState.toString());
+            logger.info("onSuccess");
+            logger.info(downloadState.toString());
 
-                currentDownloadState = downloadState;
+            downloadStateRepository.save(downloadState);
 
-                Grid<CutValue> newGrid = getGridView(downloadState.getPairs(), downloadState.getId());
-                remove(cutFile);
-                remove(grid);
-                add(newGrid);
-                add(cutFile);
-                grid = newGrid;
+            currentDownloadState = downloadState;
 
-              }
+            Grid<CutValue> newGrid = getGridView(downloadState.getPairs(), downloadState.getVideoId());
+            remove(cutFile);
+            remove(grid);
+            add(newGrid);
+            add(cutFile);
+            grid = newGrid;
 
-              @Override
-              public void onError(@NonNull Throwable e) {
-                logger.error("onError");
-                logger.error(e.getMessage());
-                e.printStackTrace();
-              }
-            });
+          }
+
+          @Override
+          public void onError(@NonNull Throwable e) {
+            logger.error("onError");
+            logger.error(e.getMessage());
+            e.printStackTrace();
+          }
+        });
 
         getChapters.setEnabled(true);
       }
@@ -236,7 +144,7 @@ public class MainView extends VerticalLayout {
       @Override
       public void onComponentEvent(ClickEvent<Button> event) {
         ArrayList<File> cutFiles = downloadMultipleCut(currentDownloadState.getJson(), grid.getSelectedItems(),
-            videoId);
+            currentDownloadState.getVideoId());
         if (cutFiles == null || cutFiles.isEmpty()) {
           System.out.println("cutFiles.isEmpty() = ");
           return;
@@ -249,7 +157,7 @@ public class MainView extends VerticalLayout {
           System.out.println("zipFile.getAbsolutePath() = " + zipFile.getAbsolutePath());
           ArrayList<File> filesArrayList = new ArrayList<>();
           filesArrayList.add(zipFile);
-          startDownloadFile(filesArrayList, getUI(), logger, videoId);
+          startDownloadFile(filesArrayList, getUI(), logger, currentDownloadState.getVideoId());
         } catch (IOException e) {
           e.printStackTrace();
           logger.error(e.getMessage());
@@ -321,8 +229,9 @@ public class MainView extends VerticalLayout {
 
             Set<CutValue> cutValueSet = new HashSet<>();
             cutValueSet.add(cutValue);
-            ArrayList<File> files = downloadMultipleCut(currentDownloadState.getId(), cutValueSet, videoId);
-            startDownloadFile(files, getUI(), logger, videoId);
+            ArrayList<File> files = downloadMultipleCut(currentDownloadState.getVideoId(), cutValueSet,
+                currentDownloadState.getVideoId());
+            startDownloadFile(files, getUI(), logger, currentDownloadState.getVideoId());
           }
         });
         return button;

@@ -1,8 +1,14 @@
 package com.green.square;
 
 import java.io.File;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
+@Component
 public class FileManagerController {
+
+  @Autowired
+  public CustomerRepository repository;
 
   private static FileManagerController ourInstance = new FileManagerController();
 
@@ -12,6 +18,7 @@ public class FileManagerController {
 
   public FileManagerController() {
   }
+
 
   public File[] getFilesByPath(String path){
 
