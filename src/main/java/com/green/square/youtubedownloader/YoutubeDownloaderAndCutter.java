@@ -30,13 +30,6 @@ import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.http.util.TextUtils;
 import org.joda.time.DateTime;
@@ -60,13 +53,6 @@ public class YoutubeDownloaderAndCutter {
   public static YoutubeDownloaderAndCutter getInstance() {
     return ourInstance;
   }
-
-  public YoutubeDownloaderAndCutter() {
-  }
-
-  public void saveDownloadState() {
-  }
-
 
   public void downloadAndCutMusicRxJavaStyleWithBuilder(String pathToYoutubedl, String outFolder, List<String> links,
       String ffmpegPath, Logger logger) {
@@ -135,18 +121,6 @@ public class YoutubeDownloaderAndCutter {
   }
 
 
-  private Single<String> downloadJsonInMemoryRxJava(String pathToYoutubedl, String id, ExecutorService inputThread,
-      ExecutorService errorThread, Logger logger) {
-
-    System.out.println("\"downloadJsonInMemoryRxJava\" = " + "downloadJsonInMemoryRxJava");
-
-    String json = downloadJsonInMemory(pathToYoutubedl, id, inputThread, errorThread, logger);
-    if (TextUtils.isEmpty(json)) {
-      return Single.error(new IllegalArgumentException());
-    }
-    return Single.just(json);
-  }
-
   private Single<String> getIdFromLinkRxJava(String pathToYoutubedl, String videoLink, ExecutorService inputThread,
       ExecutorService errorThread, Logger logger) {
     String id = getIdFromLink(pathToYoutubedl, videoLink, inputThread, errorThread, logger);
@@ -182,66 +156,10 @@ public class YoutubeDownloaderAndCutter {
     //GoogleDrive.getInstance().saveFileInGoogleDrive(pathToSave, title, files);
   }
 
-  public static final String pathToYoutubedlOptionsName = "pathToYoutubedl";
-  public static final String outputFolderOptionsName = "outputFolder";
-  public static final String linkIdOptionsName = "linkId";
-  public static final String ffmpegPathOptionsName = "ffmpegPath";
-
-  public CommandArgumentsResult parsingArguments(String[] args, CommandArgumentsResult defaultValue, Logger logger) {
-
-    Options options = new Options();
-
-    Option optionYoutubedlOption = new Option(pathToYoutubedlOptionsName, pathToYoutubedlOptionsName, true,
-        "PathToYoutubedl");
-    optionYoutubedlOption.setRequired(false);
-    options.addOption(optionYoutubedlOption);
-
-    Option outputFolderOption = new Option(outputFolderOptionsName, outputFolderOptionsName, true, "OutputFolder");
-    outputFolderOption.setRequired(false);
-    options.addOption(outputFolderOption);
-
-    Option linkIdOption = new Option(linkIdOptionsName, linkIdOptionsName, true, "LinkId");
-    linkIdOption.setRequired(false);
-    options.addOption(linkIdOption);
-
-    Option ffmpegPath = new Option(ffmpegPathOptionsName, ffmpegPathOptionsName, true, "FfmpegPath");
-    ffmpegPath.setRequired(false);
-    options.addOption(ffmpegPath);
-
-    CommandLineParser parser = new DefaultParser();
-    HelpFormatter formatter = new HelpFormatter();
-    CommandLine cmd;
-
-    try {
-      cmd = parser.parse(options, args);
-
-      if (cmd.hasOption(pathToYoutubedlOptionsName)) {
-        defaultValue.pathToYoutubedl = cmd.getOptionValue(pathToYoutubedlOptionsName);
-      }
-
-      if (cmd.hasOption(outputFolderOptionsName)) {
-        defaultValue.outputFolderPath = cmd.getOptionValue(outputFolderOptionsName);
-      }
-
-      if (cmd.hasOption(linkIdOptionsName)) {
-        defaultValue.linkId = cmd.getOptionValue(linkIdOptionsName);
-      }
-
-      if (cmd.hasOption(ffmpegPathOptionsName)) {
-        defaultValue.ffmpegPath = cmd.getOptionValue(ffmpegPathOptionsName);
-      }
-
-    } catch (ParseException e) {
-      logger.debug(e.getMessage());
-      formatter.printHelp("utility-name", options);
-      System.exit(1);
-    }
-
-    return defaultValue;
-  }
 
   public static ArrayList<CutValue> getDescFromYoutubeApi(String videoId, String durationInSeconds) {
     ArrayList<CutValue> result = new ArrayList<>();
+
     List<String> desc = YoutubeAPIController.getInstance().getComments(videoId);
     for (String s : desc) {
       ArrayList<CutValue> parsingDescriptionResult = parsingDescriptionInfo(s, durationInSeconds);
@@ -293,7 +211,7 @@ public class YoutubeDownloaderAndCutter {
         .doOnSuccess(downloadState -> {
           logger.info("We found record by videoLink in a database = " + downloadState);
           if (TextUtils.isEmpty(downloadState.getVideoId())) {
-            throw new NullPointerException("idVideo is null");
+            throw new NullPointerException("idVideo is null or empty = " + downloadState.getVideoId());
           }
           logger.info("idVideo = " + downloadState.getVideoId());
         });
@@ -371,11 +289,11 @@ public class YoutubeDownloaderAndCutter {
               if (!folder.exists() && !folder.isDirectory()) {
                 throw new NullPointerException();
               }
-              return downloadState.toBuilder().createdFolderPath(folder.getAbsolutePath()).build();
+          return downloadState.toBuilder().createdFolderPath(folder.getAbsolutePath() + File.separator).build();
             }
         )
         .map(createdFolder -> createdFolder.toBuilder()
-            .createdFolderPath(createdFolder.getCreatedFolderPath() + File.separator).build())
+            .createdFolderPath(createdFolder.getCreatedFolderPath()).build())
         .doOnSuccess(new Consumer<DownloadState>() {
           @Override
           public void accept(DownloadState pathToYoutubeFolder) throws Throwable {

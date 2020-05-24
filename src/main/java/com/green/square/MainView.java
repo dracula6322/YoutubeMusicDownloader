@@ -1,6 +1,5 @@
 package com.green.square;
 
-import static com.green.square.youtubedownloader.YoutubeDownloader.getDefaultArguments;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.cutFileByCutValue;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.deleteAndCreateFolder;
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.downloadFile;
@@ -8,8 +7,9 @@ import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getA
 import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.makeGoodString;
 
 import com.green.square.youtubedownloader.CommandArgumentsResult;
-import com.green.square.youtubedownloader.YoutubeDownloader;
+import com.green.square.youtubedownloader.ProgramArgumentsController;
 import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
+import com.green.square.youtubedownloader.YoutubeDownloaderMain;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.Component;
@@ -53,22 +53,23 @@ public class MainView extends VerticalLayout {
   Button cutFile = new Button("Cut chosen file as zip");
   ExecutorService inputThread = Executors.newFixedThreadPool(2);
   ExecutorService errorThread = Executors.newFixedThreadPool(2);
-  Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
+  Logger logger = LoggerFactory.getLogger(YoutubeDownloaderMain.class);
   CommandArgumentsResult arguments = CommandArgumentsResult.builder().build();
   DownloadState currentDownloadState = DownloadState.builder().build();
 
   @Autowired
-  public DownloadStateRepository downloadStateRepository;
+  DownloadStateRepository downloadStateRepository;
 
   @Autowired
   YoutubeDownloaderAndCutter youtubeDownloaderAndCutter;
 
+  @Autowired
+  ProgramArgumentsController programArgumentsController;
+
   @Override
   protected void onAttach(AttachEvent attachEvent) {
     super.onAttach(attachEvent);
-    arguments = getDefaultArguments(new String[]{}, logger);
-    youtubeDownloaderAndCutter.saveDownloadState();
-
+    arguments = programArgumentsController.getArguments();
   }
 
   @Override
@@ -77,6 +78,8 @@ public class MainView extends VerticalLayout {
   }
 
   public MainView() {
+
+    logger.info("MainView construction");
 
     String videoHintLint = "https://www.youtube.com/watch?v=m81koYhgc5o&t=215s";
     TextField youtubeLink = new TextField();

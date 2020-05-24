@@ -1,9 +1,8 @@
 package com.green.square;
 
-import static com.green.square.youtubedownloader.YoutubeDownloader.getDefaultArguments;
-
 import com.green.square.youtubedownloader.CommandArgumentsResult;
-import com.green.square.youtubedownloader.YoutubeDownloader;
+import com.green.square.youtubedownloader.ProgramArgumentsController;
+import com.green.square.youtubedownloader.YoutubeDownloaderMain;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -25,6 +24,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,18 +36,23 @@ public class GreetingController extends HttpServlet {
 
   ExecutorService downloadThread;
 
-  static public CommandArgumentsResult commandArgumentsResult;
+  @Autowired
+  public ProgramArgumentsController programArgumentsController;
 
-  public GreetingController() {
+  public CommandArgumentsResult commandArgumentsResult;
 
-    Logger logger = LoggerFactory.getLogger(YoutubeDownloader.class);
-    this.commandArgumentsResult = getDefaultArguments(new String[0], logger);
+  @Autowired
+  public GreetingController(ProgramArgumentsController programArgumentsController) {
+
+    this.programArgumentsController = programArgumentsController;
+    Logger logger = LoggerFactory.getLogger(YoutubeDownloaderMain.class);
+    logger.info("programArgumentsController = " + programArgumentsController);
+    commandArgumentsResult = programArgumentsController.getArguments();
     System.out.println("fileSystemConfiguration = " + this.commandArgumentsResult);
-    System.out.println("\"We are here\" = " + "We are here");
     downloadThread = Executors.newSingleThreadExecutor();
 
-
   }
+
 
   @RequestMapping(value = "/files/", method = RequestMethod.GET)
   public String getAllYoutubeFolders() {
@@ -105,7 +110,7 @@ public class GreetingController extends HttpServlet {
 
   }
 
-  public static void downloadAllFilesWithZip(String filePath, HttpServletResponse response) {
+  public void downloadAllFilesWithZip(String filePath, HttpServletResponse response) {
 
     File folder = new File(commandArgumentsResult.getOutputFolderPath() + filePath + File.separator);
     if (folder.listFiles() == null) {
@@ -162,7 +167,7 @@ public class GreetingController extends HttpServlet {
     return null;
   }
 
-  public static void downloadFile(String hashNameFile, String filePath,
+  public void downloadFile(String hashNameFile, String filePath,
       HttpServletResponse response) throws IOException {
     System.out.println("hashNameFile = " + hashNameFile);
     File folder = new File(commandArgumentsResult.getOutputFolderPath() + filePath + File.separator);
