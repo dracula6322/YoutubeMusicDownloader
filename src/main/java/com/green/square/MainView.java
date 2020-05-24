@@ -232,7 +232,7 @@ public class MainView extends VerticalLayout {
 
             Set<CutValue> cutValueSet = new HashSet<>();
             cutValueSet.add(cutValue);
-            ArrayList<File> files = downloadMultipleCut(currentDownloadState.getVideoId(), cutValueSet,
+            ArrayList<File> files = downloadMultipleCut(currentDownloadState.getJson(), cutValueSet,
                 currentDownloadState.getVideoId());
             startDownloadFile(files, getUI(), logger, currentDownloadState.getVideoId());
           }

@@ -11,6 +11,9 @@ public class YoutubeDownloaderMain {
   @Autowired
   ProgramArgumentsController programArgumentsController;
 
+  @Autowired
+  YoutubeDownloaderAndCutter youtubeDownloaderAndCutter;
+
   public static void main(String... args) {
     new YoutubeDownloaderMain().getMusic(args);
   }
@@ -34,7 +37,7 @@ public class YoutubeDownloaderMain {
     List<String> links = new ArrayList<>();
     links.add(linkId);
 
-    YoutubeDownloaderAndCutter.getInstance()
+    youtubeDownloaderAndCutter
         .downloadAndCutMusicRxJavaStyleWithBuilder(pathToYoutubedl, outFolder, links, ffmpegPath, logger);
   }
 

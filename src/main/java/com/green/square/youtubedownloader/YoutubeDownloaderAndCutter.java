@@ -45,13 +45,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class YoutubeDownloaderAndCutter {
 
-  @Autowired
   public DownloadStateRepository downloadStateRepository;
 
-  private static YoutubeDownloaderAndCutter ourInstance = new YoutubeDownloaderAndCutter();
+//  private static YoutubeDownloaderAndCutter ourInstance = new YoutubeDownloaderAndCutter();
+//
+//  public static YoutubeDownloaderAndCutter getInstance() {
+//    return ourInstance;
+//  }
 
-  public static YoutubeDownloaderAndCutter getInstance() {
-    return ourInstance;
+  @Autowired
+  public YoutubeDownloaderAndCutter(DownloadStateRepository downloadStateRepository) {
+    this.downloadStateRepository = downloadStateRepository;
   }
 
   public void downloadAndCutMusicRxJavaStyleWithBuilder(String pathToYoutubedl, String outFolder, List<String> links,
@@ -521,7 +525,7 @@ public class YoutubeDownloaderAndCutter {
 
     String rootDirPath;
     if (SystemUtils.IS_OS_LINUX) {
-      rootDirPath = "/";
+      rootDirPath = String.valueOf(File.separatorChar);
     } else {
       rootDirPath = "";
     }
