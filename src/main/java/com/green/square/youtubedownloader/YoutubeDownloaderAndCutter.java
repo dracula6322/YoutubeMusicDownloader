@@ -295,6 +295,7 @@ public class YoutubeDownloaderAndCutter {
       @Override
       public void accept(DownloadState downloadState) throws Throwable {
         logger.info("videoTitle = " + downloadState.getVideoTitle());
+
       }
     });
 
