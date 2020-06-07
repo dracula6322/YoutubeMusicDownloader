@@ -6,7 +6,11 @@
 
   <groupId>com.green.square</groupId>
   <artifactId>YoutubeDownloader</artifactId>
+  <packaging>pom</packaging>
   <version>1.0-SNAPSHOT</version>
+  <!--  <modules>-->
+  <!--    <module>VaadinModule</module>-->
+  <!--  </modules>-->
   <name>YoutubeDownloader</name>
 
   <description>Demo project for Spring Boot</description>
@@ -117,6 +121,11 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>2.22.0</version>
       </plugin>
     </plugins>
   </build>

@@ -1,5 +1,11 @@
 package com.green.square.youtubedownloader;
 
+import com.green.square.DownloadState;
+import io.reactivex.rxjava3.annotations.NonNull;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.functions.Consumer;
+import io.reactivex.rxjava3.functions.Function;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -30,15 +36,67 @@ public class YoutubeDownloaderMain {
     String ffmpegPath = arguments.ffmpegPath;
 
     logger.debug("pathToYoutubedl = " + pathToYoutubedl);
-    logger.error("outFolder = " + outFolder);
+    logger.debug("outFolder = " + outFolder);
     logger.debug("linkId = " + linkId);
     logger.debug("ffmpegPath = " + ffmpegPath);
 
     List<String> links = new ArrayList<>();
     links.add(linkId);
 
-    youtubeDownloaderAndCutter
-        .downloadAndCutMusicRxJavaStyleWithBuilder(pathToYoutubedl, outFolder, links, ffmpegPath, logger);
+//    youtubeDownloaderAndCutter
+//        .downloadAndCutMusicRxJavaStyleWithBuilder(pathToYoutubedl, outFolder, links, ffmpegPath, logger);
+
+    @NonNull Single<DownloadState> state = youtubeDownloaderAndCutter.getPairs(pathToYoutubedl, linkId, logger);
+
+    state.doOnSuccess(new Consumer<DownloadState>() {
+      @Override
+      public void accept(DownloadState downloadState) throws Throwable {
+        System.out.println("downloadState = " + downloadState);
+      }
+    }).doOnError(new Consumer<Throwable>() {
+      @Override
+      public void accept(Throwable throwable) throws Throwable {
+        logger.error(throwable.getMessage());
+      }
+    }).map(new Function<DownloadState, DownloadState>() {
+      @Override
+      public DownloadState apply(DownloadState downloadState) throws Throwable {
+
+        String createdFolderPath = youtubeDownloaderAndCutter
+            .createFolder(arguments.getOutputFolderPath(), downloadState.getVideoId(),
+                downloadState.getAudioFileName(), logger);
+
+        return downloadState.toBuilder().createdFolderPath(createdFolderPath).build();
+      }
+    }).map(new Function<DownloadState, DownloadState>() {
+      @Override
+      public DownloadState apply(DownloadState downloadState) throws Throwable {
+
+        File downloadedVideoFilePath = youtubeDownloaderAndCutter
+            .downloadVideo(logger, pathToYoutubedl, downloadState.getAudioFileName(),
+                downloadState.getCreatedFolderPath(), downloadState.getVideoId());
+
+        if (downloadedVideoFilePath == null) {
+          throw new NullPointerException();
+        }
+
+        return downloadState.toBuilder().downloadedAudioFilePath(downloadedVideoFilePath.getAbsolutePath()).build();
+      }
+    }).doOnSuccess(new Consumer<DownloadState>() {
+      @Override
+      public void accept(DownloadState downloadState) throws Throwable {
+        logger.info("downloadState.getDownloadedAudioFilePath() = " + downloadState.getDownloadedAudioFilePath());
+
+        ArrayList<File> files = youtubeDownloaderAndCutter
+            .cutTheFileIntoPieces(downloadState.getDownloadedAudioFilePath(), downloadState.getPairs(), logger,
+                arguments, downloadState.getCreatedFolderPath(), downloadState.getDurationInSeconds());
+
+        logger.info("files = " + files.toString());
+      }
+    })
+
+        .subscribe();
+
   }
 
 

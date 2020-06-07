@@ -2,13 +2,19 @@ package com.green.square;
 
 import com.green.square.youtubedownloader.CommandArgumentsResult;
 import com.green.square.youtubedownloader.ProgramArgumentsController;
+import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
 import com.green.square.youtubedownloader.YoutubeDownloaderMain;
+import io.reactivex.rxjava3.annotations.NonNull;
+import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.core.SingleObserver;
+import io.reactivex.rxjava3.disposables.Disposable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -39,12 +45,22 @@ public class GreetingController extends HttpServlet {
   @Autowired
   public ProgramArgumentsController programArgumentsController;
 
+  @Autowired
+  DownloadStateRepository downloadStateRepository;
+
+  public YoutubeDownloaderAndCutter youtubeDownloaderAndCutter;
+
+  ExecutorService inputThread = Executors.newFixedThreadPool(2);
+  ExecutorService errorThread = Executors.newFixedThreadPool(2);
   public CommandArgumentsResult commandArgumentsResult;
+  public Logger logger = LoggerFactory.getLogger(getClass().getName());
 
   @Autowired
-  public GreetingController(ProgramArgumentsController programArgumentsController) {
+  public GreetingController(ProgramArgumentsController programArgumentsController,
+      YoutubeDownloaderAndCutter youtubeDownloaderAndCutter) {
 
     this.programArgumentsController = programArgumentsController;
+    this.youtubeDownloaderAndCutter = youtubeDownloaderAndCutter;
     Logger logger = LoggerFactory.getLogger(YoutubeDownloaderMain.class);
     logger.info("programArgumentsController = " + programArgumentsController);
     commandArgumentsResult = programArgumentsController.getArguments();
@@ -107,6 +123,57 @@ public class GreetingController extends HttpServlet {
   public void downloadAllFiles(@PathVariable("filePath") String filePath, HttpServletResponse response) {
 
     downloadAllFilesWithZip(filePath, response);
+  }
+
+  @RequestMapping(value = "/downloadAndCutVideo/{videoId}", method = RequestMethod.GET)
+  public void downloadAndCutVideo(@PathVariable("videoId") String videoId) {
+
+    CommandArgumentsResult arguments = commandArgumentsResult;
+
+    String videoFullLength = "https://www.youtube.com/watch?v=" + videoId;
+
+    @NonNull Single<DownloadState> rxSinglePairs = youtubeDownloaderAndCutter
+        .getPairs(arguments.pathToYoutubedl, videoFullLength, logger);
+
+    rxSinglePairs.subscribe(new SingleObserver<DownloadState>() {
+      @Override
+      public void onSubscribe(@NonNull Disposable d) {
+        logger.info("onSubscribe");
+        logger.info(d.toString());
+      }
+
+      @Override
+      public void onSuccess(@NonNull DownloadState downloadState) {
+
+        logger.info("onSuccess");
+        logger.info(downloadState.toString());
+
+        downloadStateRepository.save(downloadState);
+
+        File downloadedVideoFilePath = youtubeDownloaderAndCutter
+            .downloadVideo(logger, arguments.getPathToYoutubedl(), downloadState.getAudioFileName(),
+                downloadState.getCreatedFolderPath(), downloadState.getVideoId());
+
+        ArrayList<File> files = youtubeDownloaderAndCutter
+            .cutTheFileIntoPieces(downloadedVideoFilePath.getAbsolutePath(), downloadState.getPairs(), logger,
+                arguments, downloadState.getCreatedFolderPath(), downloadState.getDurationInSeconds());
+//
+//        ArrayList<File> result = youtubeDownloaderAndCutter
+//            .downloadMultipleCut(downloadState.getPairs(), logger, arguments,
+//                downloadState.getAudioFileName(), downloadState.getCreatedFolderPath(), downloadState.getVideoId(),
+//                downloadState.getDuration());
+
+        logger.info("downloadAndCutVideo");
+        logger.info(files.toString());
+      }
+
+      @Override
+      public void onError(@NonNull Throwable e) {
+        logger.error("onError");
+        logger.error(e.getMessage());
+        e.printStackTrace();
+      }
+    });
 
   }
 
@@ -167,8 +234,7 @@ public class GreetingController extends HttpServlet {
     return null;
   }
 
-  public void downloadFile(String hashNameFile, String filePath,
-      HttpServletResponse response) throws IOException {
+  public void downloadFile(String hashNameFile, String filePath, HttpServletResponse response) throws IOException {
     System.out.println("hashNameFile = " + hashNameFile);
     File folder = new File(commandArgumentsResult.getOutputFolderPath() + filePath + File.separator);
     if (folder.listFiles() == null) {
@@ -236,7 +302,6 @@ public class GreetingController extends HttpServlet {
       throw new RuntimeException("IOError writing file to output stream");
     }
   }
-
 
   public static String makeString(File file) {
     byte[] bytes = file.getName().getBytes(StandardCharsets.UTF_8);

@@ -1,11 +1,5 @@
 package com.green.square;
 
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.cutFileByCutValue;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.deleteAndCreateFolder;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.downloadFile;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.getAudioFileNameFromJsonData;
-import static com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.makeGoodString;
-
 import com.green.square.youtubedownloader.CommandArgumentsResult;
 import com.green.square.youtubedownloader.ProgramArgumentsController;
 import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
@@ -32,13 +26,8 @@ import io.reactivex.rxjava3.core.SingleObserver;
 import io.reactivex.rxjava3.disposables.Disposable;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -95,6 +84,7 @@ public class MainView extends VerticalLayout {
 
         if (youtubeLink.isEmpty()) {
           Notification.show("Must enter url");
+          getChapters.setEnabled(true);
           return;
         }
 
@@ -102,8 +92,7 @@ public class MainView extends VerticalLayout {
         arguments = arguments.toBuilder().linkId(url).build();
 
         @NonNull Single<DownloadState> rxSinglePairs = youtubeDownloaderAndCutter
-            .getPairs(arguments.pathToYoutubedl, arguments.getLinkId(),
-                arguments.getOutputFolderPath(), inputThread, errorThread, logger);
+            .getPairs(arguments.pathToYoutubedl, arguments.getLinkId(), logger);
 
         rxSinglePairs.subscribe(new SingleObserver<DownloadState>() {
           @Override
@@ -133,7 +122,7 @@ public class MainView extends VerticalLayout {
 
           @Override
           public void onError(@NonNull Throwable e) {
-            logger.error("onError");
+            logger.error("getChapters onError");
             logger.error(e.getMessage());
             e.printStackTrace();
           }
@@ -146,8 +135,23 @@ public class MainView extends VerticalLayout {
     cutFile.addClickListener(new ComponentEventListener<ClickEvent<Button>>() {
       @Override
       public void onComponentEvent(ClickEvent<Button> event) {
-        ArrayList<File> cutFiles = downloadMultipleCut(currentDownloadState.getJson(), grid.getSelectedItems(),
-            currentDownloadState.getVideoId());
+
+        ArrayList<CutValue> selectedItems = new ArrayList<>(grid.getSelectedItems());
+
+//        ArrayList<File> cutFiles = youtubeDownloaderAndCutter
+//            .downloadMultipleCut(selectedItems, logger, arguments,
+//                currentDownloadState.getAudioFileName(), currentDownloadState.getCreatedFolderPath(),
+//                currentDownloadState.getVideoId(), currentDownloadState.getDuration());
+
+        File downloadedVideoFilePath = youtubeDownloaderAndCutter
+            .downloadVideo(logger, arguments.getPathToYoutubedl(), currentDownloadState.getAudioFileName(),
+                currentDownloadState.getCreatedFolderPath(),
+                currentDownloadState.getVideoId());
+
+        ArrayList<File> cutFiles = youtubeDownloaderAndCutter
+            .cutTheFileIntoPieces(downloadedVideoFilePath.getAbsolutePath(), selectedItems, logger,
+                arguments, currentDownloadState.getCreatedFolderPath(), currentDownloadState.getDurationInSeconds());
+
         if (cutFiles == null || cutFiles.isEmpty()) {
           System.out.println("cutFiles.isEmpty() = ");
           return;
@@ -166,6 +170,7 @@ public class MainView extends VerticalLayout {
           logger.error(e.getMessage());
         }
 
+
       }
     });
 
@@ -174,39 +179,6 @@ public class MainView extends VerticalLayout {
     add(cutFile);
   }
 
-  public ArrayList<File> downloadMultipleCut(String jsonData, Set<CutValue> selectedItemsSet, String videoId) {
-    if (selectedItemsSet == null || selectedItemsSet.size() == 0) {
-      Notification.show("Files not selected");
-      return new ArrayList<>();
-    }
-    ArrayList<CutValue> selectedItemsArrayList = new ArrayList<>(selectedItemsSet);
-    String audioFileName = getAudioFileNameFromJsonData(jsonData);
-    logger.info("audioFileName = " + audioFileName);
-    audioFileName = makeGoodString(audioFileName);
-    logger.info("audioFileName = " + audioFileName);
-    String pathToYoutubeFolder = arguments.outputFolderPath + videoId + File.separator;
-    logger.info("pathToYoutubeFolder = " + pathToYoutubeFolder);
-    Path path = Paths.get(pathToYoutubeFolder + audioFileName);
-    logger.info("path = " + path.toString());
-    File downloadedAudioFile;
-    boolean downloadedFileIsExists = Files.exists(path);
-    if (downloadedFileIsExists) {
-      logger.debug("File exists and don't need to download it");
-      downloadedAudioFile = path.toFile();
-    } else {
-      logger.debug("File not exists");
-      File createdFolder = deleteAndCreateFolder(pathToYoutubeFolder, audioFileName, logger);
-      downloadedAudioFile = downloadFile(arguments.pathToYoutubedl, arguments.getLinkId(),
-          createdFolder.getAbsolutePath(), inputThread, errorThread, logger, "original_%(id)s.%(ext)s");
-      logger.debug("downloadedAudioFile = " + downloadedAudioFile);
-    }
-
-    ArrayList<File> files = cutFileByCutValue(arguments.ffmpegPath, downloadedAudioFile,
-        selectedItemsArrayList, inputThread, errorThread, pathToYoutubeFolder, logger);
-    logger.info("files = " + files);
-
-    return files;
-  }
 
   public Grid<CutValue> getGridView(ArrayList<CutValue> values, String id) {
     Grid<CutValue> grid = new Grid<>(CutValue.class);
@@ -214,8 +186,8 @@ public class MainView extends VerticalLayout {
     ArrayList<CutValue> newArray = new ArrayList<>();
 
     for (CutValue value : values) {
-      String hashName = GreetingController.getHashNameFile(value.title);
-      value = value.toBuilder().hashName(hashName).build();
+      //String hashName = GreetingController.getHashNameFile(value.title);
+      //value = value.toBuilder().hashName(hashName).build();
       newArray.add(value);
     }
     values = newArray;
@@ -230,11 +202,20 @@ public class MainView extends VerticalLayout {
           @Override
           public void onComponentEvent(ClickEvent<Button> event) {
 
-            Set<CutValue> cutValueSet = new HashSet<>();
-            cutValueSet.add(cutValue);
-            ArrayList<File> files = downloadMultipleCut(currentDownloadState.getJson(), cutValueSet,
-                currentDownloadState.getVideoId());
-            startDownloadFile(files, getUI(), logger, currentDownloadState.getVideoId());
+            ArrayList<CutValue> selectedItems = new ArrayList<>(grid.getSelectedItems());
+            selectedItems.add(cutValue);
+
+            File downloadedVideoFilePath = youtubeDownloaderAndCutter
+                .downloadVideo(logger, arguments.getPathToYoutubedl(), currentDownloadState.getAudioFileName(),
+                    currentDownloadState.getCreatedFolderPath(),
+                    currentDownloadState.getVideoId());
+
+            ArrayList<File> cutFiles = youtubeDownloaderAndCutter
+                .cutTheFileIntoPieces(downloadedVideoFilePath.getAbsolutePath(), selectedItems, logger,
+                    arguments, currentDownloadState.getCreatedFolderPath(),
+                    currentDownloadState.getDurationInSeconds());
+
+            startDownloadFile(cutFiles, getUI(), logger, currentDownloadState.getVideoId());
           }
         });
         return button;

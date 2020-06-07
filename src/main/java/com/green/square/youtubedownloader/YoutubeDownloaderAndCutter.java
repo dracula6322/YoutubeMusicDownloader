@@ -3,34 +3,35 @@ package com.green.square.youtubedownloader;
 import com.green.square.CutValue;
 import com.green.square.DownloadState;
 import com.green.square.DownloadStateRepository;
+import com.green.square.ProgramExecutor;
 import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Single;
-import io.reactivex.rxjava3.core.SingleObserver;
-import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.functions.Consumer;
 import io.reactivex.rxjava3.functions.Function;
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
+import java.lang.invoke.WrongMethodTypeException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.TimeZone;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.function.Supplier;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.SystemUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.util.TextUtils;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -45,94 +46,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class YoutubeDownloaderAndCutter {
 
-  public DownloadStateRepository downloadStateRepository;
-
-//  private static YoutubeDownloaderAndCutter ourInstance = new YoutubeDownloaderAndCutter();
-//
-//  public static YoutubeDownloaderAndCutter getInstance() {
-//    return ourInstance;
-//  }
 
   @Autowired
-  public YoutubeDownloaderAndCutter(DownloadStateRepository downloadStateRepository) {
-    this.downloadStateRepository = downloadStateRepository;
+  private DownloadStateRepository downloadStateRepository;
+
+  private ProgramExecutor programExecutor;
+
+  @Autowired
+  public YoutubeDownloaderAndCutter(ProgramExecutor programExecutor) {
+    this.programExecutor = programExecutor;
   }
 
-  public void downloadAndCutMusicRxJavaStyleWithBuilder(String pathToYoutubedl, String outFolder, List<String> links,
-      String ffmpegPath, Logger logger) {
-
-    ArrayList<String> ids = new ArrayList<>();
-
-    ExecutorService inputThread = Executors.newSingleThreadExecutor();
-    ExecutorService errorThread = Executors.newSingleThreadExecutor();
-
-    for (String videoLink : links) {
-      Single<String> id = getIdFromLinkRxJava(pathToYoutubedl, videoLink, inputThread, errorThread, logger);
-      id.doOnSuccess(new Consumer<String>() {
-        @Override
-        public void accept(String s) throws Throwable {
-          logger.debug("idVideo = " + s);
-        }
-      }).doOnError(new Consumer<Throwable>() {
-        @Override
-        public void accept(Throwable throwable) throws Throwable {
-          logger.error("idVideoError = " + throwable.getMessage());
-        }
-      }).subscribe(new Consumer<String>() {
-        @Override
-        public void accept(String id) throws Throwable {
-          logger.debug("idVideoEnd = " + id);
-          ids.add(id);
-        }
-      }, new Consumer<Throwable>() {
-        @Override
-        public void accept(Throwable throwable) throws Throwable {
-          logger.error("idVideoErrorEnd = " + throwable.getMessage());
-        }
-      });
-    }
-
-    for (String id : ids) {
-
-      @NonNull Single<DownloadState> rxSinglePairs = getPairs(pathToYoutubedl, id, outFolder, inputThread,
-          errorThread, logger);
-
-      rxSinglePairs.subscribe(new SingleObserver<DownloadState>() {
-        @Override
-        public void onSubscribe(@NonNull Disposable d) {
-          logger.info("onSubscribe");
-          logger.info(d.toString());
-        }
-
-        @Override
-        public void onSuccess(@NonNull DownloadState downloadState) {
-          logger.info("onSuccess");
-          logger.info(downloadState.getAudioFileName());
-        }
-
-        @Override
-        public void onError(@NonNull Throwable e) {
-          logger.error("onError");
-          logger.error(e.getMessage());
-          e.printStackTrace();
-        }
-      });
-
-    }
-
-    inputThread.shutdown();
-    errorThread.shutdown();
-  }
-
-
-  private Single<String> getIdFromLinkRxJava(String pathToYoutubedl, String videoLink, ExecutorService inputThread,
-      ExecutorService errorThread, Logger logger) {
-    String id = getIdFromLink(pathToYoutubedl, videoLink, inputThread, errorThread, logger);
-    if (TextUtils.isEmpty(id)) {
-      return Single.error(new IllegalArgumentException());
-    }
-    return Single.just(id);
-  }
 
   private void checkGoodOrBadResult(ArrayList<String> cutFiles, ArrayList<CutValue> pairs, Logger logger) {
 
@@ -161,7 +85,7 @@ public class YoutubeDownloaderAndCutter {
   }
 
 
-  public static ArrayList<CutValue> getDescFromYoutubeApi(String videoId, String durationInSeconds) {
+  private ArrayList<CutValue> getDescFromYoutubeApi(String videoId, long durationInSeconds) {
     ArrayList<CutValue> result = new ArrayList<>();
 
     List<String> desc = YoutubeAPIController.getInstance().getComments(videoId);
@@ -175,41 +99,144 @@ public class YoutubeDownloaderAndCutter {
     return result;
   }
 
-  public static ArrayList<CutValue> getPairs(String videoId, String jsonData, String durationInSecond) {
+  private Single<DownloadState> getPairsWithSingle(Single<DownloadState> jsonWithTimeSingle) {
 
-    ArrayList<CutValue> result = new ArrayList<>();
+    return jsonWithTimeSingle.map(downloadState -> {
+      ArrayList<CutValue> pairs = getPairs(downloadState.getVideoId(), downloadState.getJson(),
+          downloadState.getDurationInSeconds());
+
+      return downloadState.toBuilder().pairs(pairs).build();
+    });
+  }
+
+  private ArrayList<CutValue> getPairs(String videoId, String jsonData, long durationInSecond) {
+
+    ArrayList<CutValue> result;
 
     String descriptionFromJson = getDescriptionFromJson(jsonData);
-    ArrayList<CutValue> cutValuesFromDescription = parsingDescriptionInfo(descriptionFromJson,
-        durationInSecond);
-    System.out.println("cutValues = " + cutValuesFromDescription);
+    ArrayList<CutValue> cutValuesFromDescription = parsingDescriptionInfo(descriptionFromJson, durationInSecond);
+    System.out.println("cutValuesFromDescription.size() = " + cutValuesFromDescription.size());
 
     JSONArray chapters = getChaptersFromJson(jsonData);
     ArrayList<CutValue> cutValuesFromChapters = parsingChaptersInfo(chapters, durationInSecond);
-    System.out.println("chaptersPairs = " + cutValuesFromChapters);
+    System.out.println("cutValuesFromChapters.size() = " + cutValuesFromChapters.size());
     if (cutValuesFromDescription.size() > cutValuesFromChapters.size()) {
       result = cutValuesFromDescription;
     } else {
       result = cutValuesFromChapters;
     }
 
-    ArrayList<CutValue> commentPairs = getDescFromYoutubeApi(videoId, durationInSecond);
-    if (commentPairs.size() > result.size()) {
-      result = commentPairs;
+    ArrayList<CutValue> cutValuesFromComment = getDescFromYoutubeApi(videoId, durationInSecond);
+    System.out.println("cutValuesFromComment.size() = " + cutValuesFromComment.size());
+    if (cutValuesFromComment.size() > result.size()) {
+      result = cutValuesFromComment;
     }
 
     return result;
   }
 
-  public @NonNull Single<DownloadState> getVideoIdFromVideoLink(@NonNull String videoLink, Logger logger,
-      String pathToYoutubedl, ExecutorService inputThread, ExecutorService errorThread) {
+  public File downloadVideo(Logger logger, String pathToYoutubedl, String audioFileName, String pathToYoutubeFolder,
+      String videoId) {
+
+    Path potentialVideoFilePath = Paths.get(pathToYoutubeFolder + audioFileName);
+    logger.info("potentialVideoFilePath = " + potentialVideoFilePath.toString());
+    File downloadedAudioFile;
+    boolean downloadedFileIsExists = Files.exists(potentialVideoFilePath);
+    if (downloadedFileIsExists) {
+      logger.debug("File exists and don't need to download it");
+      downloadedAudioFile = potentialVideoFilePath.toFile();
+    } else {
+      logger.debug("File not exists");
+      File createdFolder = deleteAndCreateFolder(pathToYoutubeFolder, audioFileName, logger);
+      String createdAbsolutePathFolder = createdFolder.getAbsolutePath() + File.separatorChar;
+      downloadedAudioFile = downloadFileUsingYoutubedl(pathToYoutubedl, videoId, createdAbsolutePathFolder, logger,
+          "original_%(id)s.%(ext)s");
+      logger.debug("downloadedAudioFile = " + downloadedAudioFile);
+    }
+
+    return downloadedAudioFile;
+  }
+
+  public ArrayList<File> cutTheFileIntoPieces(String downloadedAudioPath,
+      ArrayList<CutValue> selectedItemsSet, Logger logger, CommandArgumentsResult arguments, String pathToYoutubeFolder,
+      long durationInSeconds) {
+
+    ArrayList<File> files = new ArrayList<>();
+
+    if (selectedItemsSet == null || selectedItemsSet.size() == 0) {
+      logger.info("Files not selected");
+      return files;
+    }
+
+    File downloadedAudioFile = Paths.get(downloadedAudioPath).toFile();
+
+    boolean isWeFoundFullInterval = false;
+
+    for (Iterator<CutValue> iterator = selectedItemsSet.listIterator(); iterator.hasNext(); ) {
+      CutValue cutValue = iterator.next();
+      if (cutValue.getStartTimeInSecond() == 0 && cutValue.getEndTimeInSecond() == durationInSeconds) {
+        if (!isWeFoundFullInterval) {
+          files.add(downloadedAudioFile);
+          isWeFoundFullInterval = true;
+        }
+        iterator.remove();
+      }
+    }
+
+    List<CompletableFuture<List<CutFileResultValue>>> callableList = new ArrayList<>();
+
+    ExecutorService threadPool = programExecutor.getBackgroundExecutors();
+
+    for (CutValue cutValue : selectedItemsSet) {
+
+      CompletableFuture<List<CutFileResultValue>> completableFuture = CompletableFuture
+          .supplyAsync(new Supplier<List<CutFileResultValue>>() {
+            @Override
+            public List<CutFileResultValue> get() {
+              return cutOneFileByCutValue(arguments.ffmpegPath, downloadedAudioFile.getAbsolutePath(), cutValue,
+                  pathToYoutubeFolder, logger);
+            }
+          }, threadPool);
+      callableList.add(completableFuture);
+    }
+    System.out.println("callableList.size() = " + callableList.size());
+
+    CompletableFuture.allOf(callableList.toArray(new CompletableFuture[callableList.size()]))
+        .thenAccept(new java.util.function.Consumer<Void>() {
+          @Override
+          public void accept(Void aVoid) {
+            logger.info("We are end all workers");
+            for (CompletableFuture<List<CutFileResultValue>> completableFuture : callableList) {
+              try {
+
+                List<CutFileResultValue> cutFileResultValueList = completableFuture.get();
+                if (cutFileResultValueList.get(0).cattedFile == null) {
+                  logger.info("Bad file " + cutFileResultValueList.get(0).commandArray);
+                  return;
+                }
+                files.add(cutFileResultValueList.get(0).cattedFile);
+              } catch (InterruptedException | ExecutionException e) {
+                logger.error(e.getMessage(), e);
+                e.printStackTrace();
+              }
+            }
+          }
+        }).join();
+
+    logger.info("files = " + files);
+
+    return files;
+  }
+
+  private @NonNull Single<DownloadState> getVideoIdFromVideoLink(@NonNull String videoLink, Logger logger,
+      String pathToYoutubedl) {
     return Single.just(videoLink)
         .map(videoLink1 -> DownloadState.builder().videoLink(videoLink1).build())
         .doOnSuccess(downloadState -> logger.info("videoLink = " + downloadState.getVideoLink()))
         .map(downloadState -> downloadStateRepository.findByVideoLink(downloadState.getVideoLink()))
         .onErrorReturn(throwable -> {
-          logger.info("We are in onErrorResult " + throwable.getMessage());
-          String videoId = getIdFromLink(pathToYoutubedl, videoLink, inputThread, errorThread, logger);
+          logger.info("We cannot found record in database : " + throwable.getMessage());
+          String videoId = getIdFromLink(pathToYoutubedl, videoLink, logger);
           return DownloadState.builder().videoLink(videoLink).videoId(videoId).build();
         })
         .doOnSuccess(downloadState -> {
@@ -221,20 +248,18 @@ public class YoutubeDownloaderAndCutter {
         });
   }
 
-  public @NonNull Single<DownloadState> getJsonFromVideoId(Single<DownloadState> videoIdSingle, Logger logger,
-      String pathToYoutubedl,
-      ExecutorService inputThread, ExecutorService errorThread) {
+  private @NonNull Single<DownloadState> getJsonFromVideoId(Single<DownloadState> videoIdSingle, Logger logger,
+      String pathToYoutubedl) {
 
     return videoIdSingle
         .map(new Function<DownloadState, DownloadState>() {
           @Override
-          public DownloadState apply(DownloadState downloadState) throws Throwable {
+          public DownloadState apply(DownloadState downloadState) {
             String json = downloadState.getJson();
             if (TextUtils.isEmpty(json)) {
               logger.info("Json from a database is null");
-              json = downloadJsonInMemory(pathToYoutubedl, downloadState.getVideoId(), inputThread, errorThread,
-                  logger);
-              logger.info("Json from a internet is " + json.length());
+              json = downloadJsonInMemory(pathToYoutubedl, downloadState.getVideoId(), logger);
+              logger.info("Json from an internet is " + json.length());
               return downloadState.toBuilder().json(json).build();
             } else {
               logger.info("Json from a database exists");
@@ -249,31 +274,55 @@ public class YoutubeDownloaderAndCutter {
             logger.error(throwable.getMessage());
           }
         });
-
-
   }
 
-  public @NonNull Single<DownloadState> getPairs(String pathToYoutubedl, String videoLink,
-      String outputFolder, ExecutorService inputThread, ExecutorService errorThread, Logger logger) {
+  public @NonNull Single<DownloadState> getPairs(String pathToYoutubedl, String videoLink, Logger logger) {
 
     if (TextUtils.isEmpty(videoLink)) {
+      logger.error("videoLink is null");
       return Single.error(new NullPointerException("videoLink is null"));
     }
 
-    Single<DownloadState> videoIdSingle = getVideoIdFromVideoLink(videoLink, logger, pathToYoutubedl, inputThread,
-        errorThread);
+    Single<DownloadState> videoIdSingle = getVideoIdFromVideoLink(videoLink, logger, pathToYoutubedl);
 
-    Single<DownloadState> jsonSingle = getJsonFromVideoId(videoIdSingle, logger, pathToYoutubedl, inputThread,
-        errorThread);
+    Single<DownloadState> jsonSingle = getJsonFromVideoId(videoIdSingle, logger, pathToYoutubedl);
 
-    return jsonSingle
+    Single<DownloadState> jsonWithTimeSingle = getTimeFromJsonSingle(jsonSingle);
+
+    Single<DownloadState> videoTitleSingle = getTitleVideoFromJsonDataSingle(jsonWithTimeSingle);
+
+    videoTitleSingle = videoTitleSingle.doOnSuccess(new Consumer<DownloadState>() {
+      @Override
+      public void accept(DownloadState downloadState) throws Throwable {
+        logger.info("videoTitle = " + downloadState.getVideoTitle());
+      }
+    });
+
+    Single<DownloadState> pairsWithSingle = getPairsWithSingle(videoTitleSingle);
+    pairsWithSingle = pairsWithSingle.map(new Function<DownloadState, DownloadState>() {
+      @Override
+      public DownloadState apply(DownloadState downloadState) throws Throwable {
+
+        for (int i = 0; i < downloadState.getPairs().size(); i++) {
+          CutValue cutValue = downloadState.getPairs().get(i);
+          if (cutValue.getStartTimeInSecond() > cutValue.getEndTimeInSecond()) {
+            cutValue.setEndTimeInSecond(downloadState.getDurationInSeconds());
+            cutValue.setEndTime(getTimeStringFromTimeLong(cutValue.getEndTimeInSecond()));
+          }
+        }
+        for (CutValue pair : downloadState.getPairs()) {
+          logger.debug("pair = " + pair);
+        }
+        return downloadState;
+      }
+    });
+
+    return pairsWithSingle
         .map(downloadState -> {
           String audioFileName = getAudioFileNameFromJsonData(downloadState.getJson());
-          logger.debug("audioFileName = " + audioFileName);
-          return downloadState.toBuilder().audioFileName(audioFileName).build();
-        })
-        .map(downloadState -> {
-          String goodString = makeGoodString(downloadState.getAudioFileName());
+          logger.debug("badAudioFileName = " + audioFileName);
+          String goodString = makeGoodString(audioFileName);
+          logger.debug("goodAudioFileName = " + goodString);
           return downloadState.toBuilder().audioFileName(goodString).build();
         })
         .doOnSuccess(downloadState -> {
@@ -281,98 +330,72 @@ public class YoutubeDownloaderAndCutter {
             throw new NullPointerException();
           }
           logger.info("audioFileName = " + downloadState.getAudioFileName());
-          File outputFolderPath = new File(outputFolder);
-          if (!outputFolderPath.isDirectory()) {
-            throw new RuntimeException();
-          }
-        })
-        .map(downloadState -> {
-              String pathToFolder = outputFolder + downloadState.getVideoId();
-              File folder = deleteAndCreateFolder(pathToFolder, downloadState.getAudioFileName(), logger);
-              Objects.requireNonNull(folder);
-              if (!folder.exists() && !folder.isDirectory()) {
-                throw new NullPointerException();
-              }
-          return downloadState.toBuilder().createdFolderPath(folder.getAbsolutePath() + File.separator).build();
-            }
-        )
-        .map(createdFolder -> createdFolder.toBuilder()
-            .createdFolderPath(createdFolder.getCreatedFolderPath()).build())
-        .doOnSuccess(new Consumer<DownloadState>() {
-          @Override
-          public void accept(DownloadState pathToYoutubeFolder) throws Throwable {
-            logger.debug("pathToYoutubeFolder = " + pathToYoutubeFolder.getCreatedFolderPath());
-          }
-        })
-        .doOnSuccess(new Consumer<DownloadState>() {
-          @Override
-          public void accept(DownloadState s) throws Throwable {
-            if (!Paths.get(s.getCreatedFolderPath()).toFile().exists()) {
-              throw new NullPointerException();
-            }
-          }
-        })
-        .map(new Function<DownloadState, DownloadState>() {
-          @Override
-          public DownloadState apply(DownloadState downloadState) throws Throwable {
-            String duration = getTimeFromJson(downloadState.getJson());
-            return downloadState.toBuilder().duration(duration).build();
-          }
-        })
-        .map(new Function<DownloadState, DownloadState>() {
-          @Override
-          public DownloadState apply(DownloadState downloadState) throws Throwable {
 
-            ArrayList<CutValue> pairs = getPairs(downloadState.getVideoId(), downloadState.getJson(),
-                downloadState.getDuration());
-
-            for (CutValue pair : pairs) {
-              logger.debug("pair = " + pair);
-            }
-            return downloadState.toBuilder().pairs(pairs).build();
-          }
         });
 
   }
 
-  public static String makeGoodString(String value) {
-    return value.replaceAll("[/\\-+^:,]", "").trim();
+  private @NonNull Single<DownloadState> createFolderSingle(Single<DownloadState> downloadStateSingle,
+      String outputFolder, Logger logger) {
+
+    return downloadStateSingle.map(new Function<DownloadState, DownloadState>() {
+      @Override
+      public DownloadState apply(DownloadState downloadState) throws Throwable {
+        String createdFolderPath = createFolder(outputFolder, downloadState.getVideoId(),
+            downloadState.getAudioFileName(), logger);
+        return downloadState.toBuilder().createdFolderPath(createdFolderPath).build();
+      }
+    });
   }
 
-  public ArrayList<Pair<String, String>> findEqualsName(ArrayList<Pair<String, String>> pairs) {
-
-    ArrayList<Pair<String, String>> result = new ArrayList<>();
-    Set<String> set = new HashSet<>();
-    for (Pair<String, String> pair : pairs) {
-      boolean contain = set.contains(pair.second);
-      if (!contain) {
-        set.add(pair.second);
-        result.add(pair);
-      } else {
-        for (long i = 1; i < Long.MAX_VALUE; i++) {
-          String name = pair.second + " (" + i + ")";
-          if (!set.contains(name)) {
-            set.add(name);
-            Pair<String, String> tmpPair = new Pair<>(pair.first, name);
-            result.add(tmpPair);
-            break;
-          }
-        }
-      }
+  public String createFolder(String outputFolder, String videoId, String audioFileName, Logger logger) {
+    File outputFolderPath = new File(outputFolder);
+    if (!outputFolderPath.isDirectory()) {
+      throw new WrongMethodTypeException("outputFolder must by folder");
     }
 
-    return result;
+    String pathToFolder = outputFolder + videoId + File.separatorChar;
+    logger.info("PathToFolder = " + pathToFolder);
+    File folder = deleteAndCreateFolder(pathToFolder, audioFileName, logger);
+    Objects.requireNonNull(folder, "Folder not created");
+    if (!folder.exists() && !folder.isDirectory()) {
+      logger.error("Folder not found");
+      throw new NullPointerException();
+    }
+
+    return folder.getAbsolutePath() + File.separator;
   }
 
-  public static String getAudioFileNameFromJsonData(String jsonData) {
+  private String makeGoodString(String value) {
+    return value.replaceAll("[/\\:*?\"<>|]", "").trim();
+  }
+
+  public String getAudioFileNameFromJsonData(String jsonData) {
     String result;
     JSONObject jsonObject = new JSONObject(jsonData);
     result = jsonObject.getString("_filename");
     return result;
   }
 
-  public static String getIdFromLink(String pathToYoutubedl, String link, ExecutorService inputThread,
-      ExecutorService errorThread, Logger logger) {
+  public String getTitleVideoFromJsonData(String jsonData) {
+    String result;
+    JSONObject jsonObject = new JSONObject(jsonData);
+    result = jsonObject.getString("title");
+    return result;
+  }
+
+  public @NonNull Single<DownloadState> getTitleVideoFromJsonDataSingle(Single<DownloadState> jsonSingle) {
+
+    return jsonSingle.map(new Function<DownloadState, DownloadState>() {
+      @Override
+      public DownloadState apply(DownloadState downloadState) throws Throwable {
+        String title = getTitleVideoFromJsonData(downloadState.getJson());
+        return downloadState.toBuilder().videoTitle(title).build();
+      }
+    });
+  }
+
+  private String getIdFromLink(String pathToYoutubedl, String link, Logger logger) {
 
     ArrayList<String> command = new ArrayList<>();
     command.add(pathToYoutubedl);
@@ -380,12 +403,16 @@ public class YoutubeDownloaderAndCutter {
     command.add(link);
 
     logger.info(command.toString());
-    Pair<Integer, ArrayList<List<String>>> result = executeFunctionAndGetStringOutputWithResult(
-        command.toArray(new String[0]), "", inputThread, errorThread, logger);
+
+    logger.info("programExecutor =" + programExecutor);
+    logger.info("downloadState =" + downloadStateRepository);
+
+    Pair<Integer, List<List<String>>> result = programExecutor.executeFunctionAndGetStringOutputWithResult(
+        command.toArray(new String[0]), "", logger);
     String videoId = "";
-    if (result.first == 0) {
+    if (result.getKey() == 0) {
       logger.debug("result = " + result);
-      videoId = result.second.get(0).get(0);
+      videoId = result.getValue().get(0).get(0);
     } else {
       logger.error("error = " + result);
     }
@@ -393,12 +420,19 @@ public class YoutubeDownloaderAndCutter {
     return videoId;
   }
 
-  public static String getTimeFromJson(String json) {
+  public String getTimeFromJson(String json) {
 
     JSONObject jsonObject = new JSONObject(json);
     int duration = jsonObject.getInt("duration");
-
     return String.valueOf(duration);
+  }
+
+  public @NonNull Single<DownloadState> getTimeFromJsonSingle(Single<DownloadState> jsonSingle) {
+
+    return jsonSingle.map(downloadState -> {
+      String duration = getTimeFromJson(downloadState.getJson());
+      return downloadState.toBuilder().durationInSeconds(Long.parseLong(duration)).build();
+    });
   }
 
   public static String getDescriptionFromJson(String json) {
@@ -420,108 +454,27 @@ public class YoutubeDownloaderAndCutter {
     return chapters;
   }
 
-  public static Pair<Integer, ArrayList<List<String>>> executeFunctionAndGetStringOutputWithResult(
-      String[] stringCommandArray, String rootDir, ExecutorService inputThread, ExecutorService errorThread,
-      Logger logger) {
-
-    ArrayList<String> commandArray = new ArrayList<>(Arrays.asList(stringCommandArray));
-    int executionCode = -1;
-    ArrayList<List<String>> result = new ArrayList<>();
-    for (int i = 0; i < 2; i++) {
-      result.add(Collections.emptyList());
-    }
-    CountDownLatch countDownLatch = new CountDownLatch(2);
-
-    try {
-      Runtime runtime = Runtime.getRuntime();
-      Process command;
-      if (TextUtils.isEmpty(rootDir)) {
-        command = runtime.exec(commandArray.toArray(new String[]{}));
-      } else {
-        command = runtime.exec(commandArray.toArray(new String[]{}), new String[0], new File(rootDir));
-      }
-      inputThread.execute(() -> {
-        try {
-          InputStream inputString = command.getInputStream();
-          List<String> resultInputString = getStringsFromInputStream(inputString, logger);
-          inputString.close();
-          result.set(0, resultInputString);
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-        countDownLatch.countDown();
-      });
-
-      errorThread.execute(() -> {
-        try {
-          InputStream inputString = command.getErrorStream();
-          List<String> resultInputString = getStringsFromInputStream(inputString, logger);
-          inputString.close();
-          result.set(1, resultInputString);
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-        countDownLatch.countDown();
-      });
-      executionCode = command.waitFor();
-
-    } catch (IOException | InterruptedException e) {
-      e.printStackTrace();
-      logger.error(e.getMessage());
-    }
-
-    try {
-      countDownLatch.await();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    }
-
-    Objects.requireNonNull(result);
-    if (result.size() != 2) {
-      logger.error("Concurrent error in mass");
-    }
-
-    return new Pair<>(executionCode, result);
-  }
-
-  private static List<String> getStringsFromInputStream(InputStream inputStream, Logger logger) {
-
-    String line;
-    List<String> result = new ArrayList<>();
-    try {
-      Reader inputStreamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
-      BufferedReader stdInput = new BufferedReader(inputStreamReader);
-      while ((line = stdInput.readLine()) != null) {
-        //logger.info(line);
-        result.add(line);
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-
-    return result;
-
-  }
-
-  public static File deleteAndCreateFolder(String pathToFolder, String audioFilePath, Logger logger) {
+  private File deleteAndCreateFolder(String pathToFolder, String audioFilePath, Logger logger) {
 
     File file = new File(pathToFolder);
     if (file.exists()) {
       for (File listFile : file.listFiles()) {
         if (listFile.getName().equals(audioFilePath)) {
-          logger.debug("We found file");
+          logger.debug("We found a file: " + " " + audioFilePath);
           continue;
         }
         listFile.delete();
       }
     }
-    file.delete();
-    file.mkdir();
+    boolean deleteResult = file.delete();
+    logger.info("deleteResult = " + deleteResult);
+    boolean mkdirResult = file.mkdir();
+    logger.info("mkdirResult = " + mkdirResult);
     return file;
   }
 
-  public static File downloadFile(String pathToYoutubedl, String id, String saveFolder,
-      ExecutorService inputThread, ExecutorService errorThread, Logger logger, String maskDownloadedFile) {
+  private File downloadFileUsingYoutubedl(String pathToYoutubedl, String id, String saveFolder, Logger logger,
+      String maskDownloadedFile) {
 
     String rootDirPath;
     if (SystemUtils.IS_OS_LINUX) {
@@ -538,23 +491,20 @@ public class YoutubeDownloaderAndCutter {
     command.add(saveFolder + maskDownloadedFile);
     command.add("--no-progress");
     command.add("-v");
-    command.add("--no-cache-dir");
-    command.add("--rm-cache-dir");
     command.add("--no-continue");
     command.add(id);
 
     logger.debug("command = " + command);
 
-    //logger.debug("commandPath = " + commandPath);
-    Pair<Integer, ArrayList<List<String>>> outputResult = executeFunctionAndGetStringOutputWithResult(
-        command.toArray(new String[0]), rootDirPath, inputThread, errorThread, logger);
-    if (outputResult.first == 0) {
+    Pair<Integer, List<List<String>>> outputResult = programExecutor.executeFunctionAndGetStringOutputWithResult(
+        command.toArray(new String[0]), rootDirPath, logger);
+    if (outputResult.getKey() == 0) {
       logger.debug("result = " + outputResult);
     } else {
       logger.error("");
     }
     logger.debug("outputResult = " + outputResult);
-    String[] standardOutputResult = outputResult.second.get(0).toArray(new String[0]);
+    String[] standardOutputResult = outputResult.getRight().get(0).toArray(new String[0]);
     for (String s : standardOutputResult) {
       final String downloadString = "[download]";
       if (s.startsWith(downloadString)) {
@@ -571,8 +521,7 @@ public class YoutubeDownloaderAndCutter {
   }
 
   @NonNull
-  public static String downloadJsonInMemory(String pathToYoutubedl, String id, ExecutorService inputThread,
-      ExecutorService errorThread, Logger logger) {
+  private String downloadJsonInMemory(String pathToYoutubedl, String id, Logger logger) {
 
     ArrayList<String> commandArray = new ArrayList<>();
 
@@ -581,93 +530,112 @@ public class YoutubeDownloaderAndCutter {
     commandArray.add("-f");
     commandArray.add("bestaudio");
     commandArray.add("-o");
-//    commandArray.add("\"" + "%(title)s" + "\"");
     commandArray.add("original_%(id)s.%(ext)s");
     commandArray.add("--print-json");
     commandArray.add(id);
 
     logger.debug("commandPath = " + commandArray.toString());
 
-    Pair<Integer, ArrayList<List<String>>> result = executeFunctionAndGetStringOutputWithResult(
-        commandArray.toArray(new String[0]), "", inputThread, errorThread, logger);
-    if (result.first == 0) {
-      logger.debug("result = " + result.second.size());
+    Pair<Integer, List<List<String>>> result = programExecutor.executeFunctionAndGetStringOutputWithResult(
+        commandArray.toArray(new String[0]), "", logger);
+    if (result.getKey() == 0) {
+      logger.debug("result = " + result.getValue().size());
     } else {
-      logger.error(String.valueOf(result.second));
+      logger.error(String.valueOf(result.getValue()));
     }
 
-    List<String> standardOutput = result.second.get(0);
+    List<String> standardOutput = result.getValue().get(0);
     return standardOutput.get(0);
   }
 
-  public static ArrayList<File> cutFileByCutValue(String ffmpegPath, File audioFile,
-      ArrayList<CutValue> pairs, ExecutorService inputThread, ExecutorService errorThread, String pathToYoutubeFolder,
-      Logger logger) {
+  private ArrayList<CutFileResultValue> cutOneFileByCutValue(String ffmpegPath, String audioFilePath,
+      CutValue pair, String pathToYoutubeFolder, Logger logger) {
 
-    ArrayList<File> result = new ArrayList<>();
+    ArrayList<CutFileResultValue> result = new ArrayList<>();
 
-    for (int i = 0; i < pairs.size(); i++) {
+    String startTime = pair.getStartTime();
+    String endTime = pair.getEndTime();
 
-      String startTime = pairs.get(i).getStartTime();
-      String endTime = pairs.get(i).getEndTime();
+    String fileName = pair.getTitle();
+    fileName = makeGoodString(fileName);
 
-      String fileName = pairs.get(i).getTitle();
-      fileName = makeGoodString(fileName);
-
-      ArrayList<String> commandArray = new ArrayList<>();
-      commandArray.add(ffmpegPath);
+    ArrayList<String> commandArray = new ArrayList<>();
+    commandArray.add(ffmpegPath);
 //      Replace file flag
-      commandArray.add("-n");
-      commandArray.add("-i");
-      commandArray.add(audioFile.getAbsolutePath());
-      commandArray.add("-ss");
-      commandArray.add(startTime);
-      commandArray.add("-to");
-      commandArray.add(endTime);
+    commandArray.add("-n");
+    commandArray.add("-i");
+    commandArray.add(audioFilePath);
+    commandArray.add("-ss");
+    commandArray.add(startTime);
+    commandArray.add("-to");
+    commandArray.add(endTime);
 
-      String rootDirPath;
-      String outputFilePath;
-      if (SystemUtils.IS_OS_LINUX) {
-        outputFilePath = fileName + ".mp4";
-        rootDirPath = pathToYoutubeFolder;
-      } else {
-        outputFilePath = (pathToYoutubeFolder + fileName) + ".mp4";
-        rootDirPath = "";
-      }
-      commandArray.add(outputFilePath);
-      String[] program = commandArray.toArray(new String[0]);
-      logger.info("Run " + Arrays.toString(program));
-      Pair<Integer, ArrayList<List<String>>> executionResult = executeFunctionAndGetStringOutputWithResult(program,
-          rootDirPath, inputThread, errorThread, logger);
-      if (executionResult.first == 0) {
-        logger.debug("result = " + result);
-      } else {
-        logger.error(String.valueOf(result));
-      }
+    String extension = FilenameUtils.getExtension(audioFilePath);
 
-      logger.debug("executionResult = " + executionResult);
-      String[] error = executionResult.second.get(1).toArray(new String[0]);
+    String rootDirPath;
+    String outputFilePath;
+    if (SystemUtils.IS_OS_LINUX) {
+      outputFilePath = fileName + "." + extension;
+      rootDirPath = pathToYoutubeFolder;
+    } else {
+      outputFilePath = (pathToYoutubeFolder + fileName) + "." + extension;
+      rootDirPath = "";
+    }
+    commandArray.add(outputFilePath);
+    String[] program = commandArray.toArray(new String[0]);
+    logger.info("Run " + Arrays.toString(program));
+    Pair<Integer, List<List<String>>> executionResult = programExecutor
+        .executeFunctionAndGetStringOutputWithResult(program, rootDirPath, logger);
+    if (executionResult.getKey() == 0) {
+      logger.debug("result = " + result);
+    } else {
+      logger.error(String.valueOf(result));
+    }
 
-      String audioOutName = getFileNameFromFfmpegCut(error);
-      if (SystemUtils.IS_OS_LINUX) {
-        audioOutName = pathToYoutubeFolder + audioOutName;
-      }
-      if (audioOutName.isEmpty()) {
-        logger.info("audioOutName.isEmpty()");
-        audioOutName = outputFilePath;
-      }
-      logger.debug("audioOutName = " + audioOutName);
-      File file = new File(audioOutName);
-      if (!file.exists()) {
-        logger.error("audioOutName = " + audioOutName);
-      } else {
-        result.add(file);
-      }
+    logger.debug("executionResult = " + executionResult);
+    String[] error = executionResult.getValue().get(1).toArray(new String[0]);
+
+    String audioOutName = getFileNameFromFfmpegCut(error);
+    if (SystemUtils.IS_OS_LINUX) {
+      audioOutName = pathToYoutubeFolder + audioOutName;
+    }
+    if (audioOutName.isEmpty()) {
+      logger.info("audioOutName.isEmpty()");
+      audioOutName = outputFilePath;
+    }
+    logger.debug("audioOutName = " + audioOutName);
+    File file = new File(audioOutName);
+    if (!file.exists()) {
+      logger.error("audioOutName = " + audioOutName);
+      result.add(new CutFileResultValue(commandArray, null));
+    } else {
+      result.add(new CutFileResultValue(commandArray, file));
     }
     return result;
   }
 
-  public static String getFileNameFromFfmpegCut(String[] executeResult) {
+  @Data
+  @AllArgsConstructor
+  public class CutFileResultValue {
+
+    List<String> commandArray;
+    File cattedFile;
+
+  }
+
+  private List<File> cutFileByCutValue(String ffmpegPath, String audioFilePath,
+      ArrayList<CutValue> pairs, String pathToYoutubeFolder,
+      Logger logger) {
+
+    ArrayList<CutFileResultValue> result = new ArrayList<>();
+
+    for (int i = 0; i < pairs.size(); i++) {
+      result = cutOneFileByCutValue(ffmpegPath, audioFilePath, pairs.get(i), pathToYoutubeFolder, logger);
+    }
+    return Collections.singletonList(result.get(0).cattedFile);
+  }
+
+  private String getFileNameFromFfmpegCut(String[] executeResult) {
 
     String result = "";
 
@@ -681,7 +649,16 @@ public class YoutubeDownloaderAndCutter {
     return result;
   }
 
-  public static ArrayList<CutValue> parsingChaptersInfo(JSONArray chapters, String durationInSecondString) {
+  private String getTimeStringFromTimeLong(long longTime) {
+
+    Date date = new Date(longTime * 1000);
+    DateFormat formatter = new SimpleDateFormat("HH:mm:ss");
+    formatter.setTimeZone(TimeZone.getTimeZone("UTC"));
+    return formatter.format(date);
+
+  }
+
+  private ArrayList<CutValue> parsingChaptersInfo(JSONArray chapters, long durationInSecond) {
 
     ArrayList<CutValue> pairs = new ArrayList<>();
 
@@ -721,9 +698,8 @@ public class YoutubeDownloaderAndCutter {
 //      int o2s = dateTime.secondOfDay().get();
 //      return Integer.compare(o1s, o2s);
 //    });
-    int durationInSecond = Integer.parseInt(durationInSecondString);
     DateTime dt = new DateTime(0, DateTimeZone.UTC);
-    dt = dt.plusSeconds(durationInSecond);
+    dt = dt.plusSeconds((int) durationInSecond);
     String output = DateTimeFormat.forPattern("HH:mm:ss").print(dt);
 
     CutValue cutValue = CutValue.builder()
@@ -738,7 +714,7 @@ public class YoutubeDownloaderAndCutter {
     return pairs;
   }
 
-  public static ArrayList<CutValue> parsingDescriptionInfo(String description, String durationInSecondString) {
+  private ArrayList<CutValue> parsingDescriptionInfo(String description, long durationInSecond) {
 
     SimpleDateFormat formatter = new SimpleDateFormat("hh:mm:ss");
     formatter.setTimeZone(TimeZone.getTimeZone(String.valueOf(TimeZone.getTimeZone("UTC"))));
@@ -797,18 +773,17 @@ public class YoutubeDownloaderAndCutter {
           e.printStackTrace();
         }
 
-        cutValues.add(new CutValue(goodLine, goodTime, "", timeInSecond, Long.MIN_VALUE, ""));
+        cutValues.add(new CutValue(goodLine, goodTime, "", timeInSecond, Long.MIN_VALUE));
         //pairs.add(new Pair<>(goodTime, goodLine));
 
       } while (firstPoint != -1);
     }
 
-    int durationInSecond = Integer.parseInt(durationInSecondString);
     Date dateDurationInSecond = new Date(durationInSecond);
     String durationInSecondStringFullFormat = formatter.format(new Date(durationInSecond));
 
     DateTime dt = new DateTime(0, DateTimeZone.UTC);
-    dt = dt.plusSeconds(durationInSecond);
+    dt = dt.plusSeconds((int) durationInSecond);
     String output = DateTimeFormat.forPattern("HH:mm:ss").print(dt);
 
     for (int i = 0; i < cutValues.size(); i++) {
@@ -830,7 +805,7 @@ public class YoutubeDownloaderAndCutter {
       }
       cutValues.get(i).setEndTimeInSecond(timeInSecond);
     }
-    cutValues.add(new CutValue("full_original", "00:00:00", output, 0, durationInSecond, ""));
+    cutValues.add(new CutValue("full_original", "00:00:00", output, 0, durationInSecond));
 
 //    pairs.sort((o1, o2) -> {
 //      DateTimeFormatter pattern = DateTimeFormat.forPattern("HH:mm:ss");
@@ -844,7 +819,7 @@ public class YoutubeDownloaderAndCutter {
     return cutValues;
   }
 
-  public static String getAllBadCharacterFromString(String substring) {
+  private String getAllBadCharacterFromString(String substring) {
 
     int firstPoint = 0;
     while (!Character.isDigit(substring.charAt(firstPoint))) {
@@ -858,7 +833,7 @@ public class YoutubeDownloaderAndCutter {
     return substring.substring(firstPoint, secondPoint + 1);
   }
 
-  public static String setFullFormatTime(String time) {
+  private String setFullFormatTime(String time) {
     String[] splitTime = time.split(":");
     List<String> arraySplitTime = new ArrayList<String>(Arrays.asList(splitTime));
     if (arraySplitTime.size() == 3) {
@@ -877,5 +852,4 @@ public class YoutubeDownloaderAndCutter {
 
     return String.join(":", arraySplitTime);
   }
-
 }

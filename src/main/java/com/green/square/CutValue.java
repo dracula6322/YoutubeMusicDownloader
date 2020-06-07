@@ -19,6 +19,4 @@ public class CutValue {
   long startTimeInSecond;
   long endTimeInSecond;
 
-  String hashName = "";
-
 }
