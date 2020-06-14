@@ -1,4 +1,4 @@
-package com.green.square;
+package com.green.square.model;
 
 import java.util.ArrayList;
 import lombok.Builder;

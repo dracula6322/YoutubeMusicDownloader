@@ -1,4 +1,4 @@
-package com.green.square.youtubedownloader;
+package com.green.square.model;
 
 import lombok.Builder;
 import lombok.Data;

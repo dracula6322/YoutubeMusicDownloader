@@ -1,9 +1,10 @@
 package com.green.square.youtubedownloader;
 
-import com.green.square.CutValue;
-import com.green.square.DownloadState;
 import com.green.square.DownloadStateRepository;
 import com.green.square.ProgramExecutor;
+import com.green.square.model.CommandArgumentsResult;
+import com.green.square.model.CutValue;
+import com.green.square.model.DownloadState;
 import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.functions.Consumer;
@@ -99,27 +100,27 @@ public class YoutubeDownloaderAndCutter {
     return result;
   }
 
-  private Single<DownloadState> getPairsWithSingle(Single<DownloadState> jsonWithTimeSingle) {
+  private Single<DownloadState> getPairsWithSingle(Single<DownloadState> jsonWithTimeSingle, Logger logger) {
 
     return jsonWithTimeSingle.map(downloadState -> {
       ArrayList<CutValue> pairs = getPairs(downloadState.getVideoId(), downloadState.getJson(),
-          downloadState.getDurationInSeconds());
+          downloadState.getDurationInSeconds(), logger);
 
       return downloadState.toBuilder().pairs(pairs).build();
     });
   }
 
-  private ArrayList<CutValue> getPairs(String videoId, String jsonData, long durationInSecond) {
+  private ArrayList<CutValue> getPairs(String videoId, String jsonData, long durationInSecond, Logger logger) {
 
     ArrayList<CutValue> result;
 
     String descriptionFromJson = getDescriptionFromJson(jsonData);
     ArrayList<CutValue> cutValuesFromDescription = parsingDescriptionInfo(descriptionFromJson, durationInSecond);
-    System.out.println("cutValuesFromDescription.size() = " + cutValuesFromDescription.size());
+    logger.info("cutValuesFromDescription.size() = " + cutValuesFromDescription.size());
 
     JSONArray chapters = getChaptersFromJson(jsonData);
     ArrayList<CutValue> cutValuesFromChapters = parsingChaptersInfo(chapters, durationInSecond);
-    System.out.println("cutValuesFromChapters.size() = " + cutValuesFromChapters.size());
+    logger.info("cutValuesFromChapters.size() = " + cutValuesFromChapters.size());
     if (cutValuesFromDescription.size() > cutValuesFromChapters.size()) {
       result = cutValuesFromDescription;
     } else {
@@ -127,7 +128,7 @@ public class YoutubeDownloaderAndCutter {
     }
 
     ArrayList<CutValue> cutValuesFromComment = getDescFromYoutubeApi(videoId, durationInSecond);
-    System.out.println("cutValuesFromComment.size() = " + cutValuesFromComment.size());
+    logger.info("cutValuesFromComment.size() = " + cutValuesFromComment.size());
     if (cutValuesFromComment.size() > result.size()) {
       result = cutValuesFromComment;
     }
@@ -157,9 +158,18 @@ public class YoutubeDownloaderAndCutter {
     return downloadedAudioFile;
   }
 
-  public ArrayList<File> cutTheFileIntoPieces(String downloadedAudioPath,
-      ArrayList<CutValue> selectedItemsSet, Logger logger, CommandArgumentsResult arguments, String pathToYoutubeFolder,
+  public List<File> cutTheFileIntoPieces(String downloadedAudioPath,
+      List<CutValue> selectedItemsSet, Logger logger, CommandArgumentsResult arguments, String pathToYoutubeFolder,
       long durationInSeconds) {
+
+    String extension = FilenameUtils.getExtension(downloadedAudioPath);
+    return this.cutTheFileIntoPieces(downloadedAudioPath, selectedItemsSet, logger, arguments, pathToYoutubeFolder,
+        durationInSeconds, extension);
+  }
+
+  public List<File> cutTheFileIntoPieces(String downloadedAudioPath,
+      List<CutValue> selectedItemsSet, Logger logger, CommandArgumentsResult arguments, String pathToYoutubeFolder,
+      long durationInSeconds, String extension) {
 
     ArrayList<File> files = new ArrayList<>();
 
@@ -193,13 +203,14 @@ public class YoutubeDownloaderAndCutter {
           .supplyAsync(new Supplier<List<CutFileResultValue>>() {
             @Override
             public List<CutFileResultValue> get() {
+
               return cutOneFileByCutValue(arguments.ffmpegPath, downloadedAudioFile.getAbsolutePath(), cutValue,
-                  pathToYoutubeFolder, logger);
+                  pathToYoutubeFolder, logger, extension);
             }
           }, threadPool);
       callableList.add(completableFuture);
     }
-    System.out.println("callableList.size() = " + callableList.size());
+    logger.info("callableList.size() = " + callableList.size());
 
     CompletableFuture.allOf(callableList.toArray(new CompletableFuture[callableList.size()]))
         .thenAccept(new java.util.function.Consumer<Void>() {
@@ -210,11 +221,11 @@ public class YoutubeDownloaderAndCutter {
               try {
 
                 List<CutFileResultValue> cutFileResultValueList = completableFuture.get();
-                if (cutFileResultValueList.get(0).cattedFile == null) {
+                if (cutFileResultValueList.get(0).choppedFile == null) {
                   logger.info("Bad file " + cutFileResultValueList.get(0).commandArray);
                   return;
                 }
-                files.add(cutFileResultValueList.get(0).cattedFile);
+                files.add(cutFileResultValueList.get(0).choppedFile);
               } catch (InterruptedException | ExecutionException e) {
                 logger.error(e.getMessage(), e);
                 e.printStackTrace();
@@ -299,7 +310,7 @@ public class YoutubeDownloaderAndCutter {
       }
     });
 
-    Single<DownloadState> pairsWithSingle = getPairsWithSingle(videoTitleSingle);
+    Single<DownloadState> pairsWithSingle = getPairsWithSingle(videoTitleSingle, logger);
     pairsWithSingle = pairsWithSingle.map(new Function<DownloadState, DownloadState>() {
       @Override
       public DownloadState apply(DownloadState downloadState) throws Throwable {
@@ -398,18 +409,19 @@ public class YoutubeDownloaderAndCutter {
 
   private String getIdFromLink(String pathToYoutubedl, String link, Logger logger) {
 
-    ArrayList<String> command = new ArrayList<>();
-    command.add(pathToYoutubedl);
-    command.add("--get-id");
-    command.add(link);
+//    ArrayList<String> command = new ArrayList<>();
+//    command.add(pathToYoutubedl);
+//    command.add("--get-id");
+//    command.add(link);
 
-    logger.info(command.toString());
+    String[] commandArray = new String[]{pathToYoutubedl, "--get-id", link};
+    logger.info(Arrays.toString(commandArray));
 
-    logger.info("programExecutor =" + programExecutor);
+    //logger.info(command.toString());
+    //logger.info("programExecutor =" + programExecutor);
     logger.info("downloadState =" + downloadStateRepository);
 
-    Pair<Integer, List<List<String>>> result = programExecutor.executeFunctionAndGetStringOutputWithResult(
-        command.toArray(new String[0]), "", logger);
+    Pair<Integer, List<List<String>>> result = programExecutor.executeCommand(commandArray, "", logger);
     String videoId = "";
     if (result.getKey() == 0) {
       logger.debug("result = " + result);
@@ -464,7 +476,7 @@ public class YoutubeDownloaderAndCutter {
           logger.debug("We found a file: " + " " + audioFilePath);
           continue;
         }
-        listFile.delete();
+        //listFile.delete();
       }
     }
     boolean deleteResult = file.delete();
@@ -497,7 +509,7 @@ public class YoutubeDownloaderAndCutter {
 
     logger.debug("command = " + command);
 
-    Pair<Integer, List<List<String>>> outputResult = programExecutor.executeFunctionAndGetStringOutputWithResult(
+    Pair<Integer, List<List<String>>> outputResult = programExecutor.executeCommand(
         command.toArray(new String[0]), rootDirPath, logger);
     if (outputResult.getKey() == 0) {
       logger.debug("result = " + outputResult);
@@ -537,7 +549,7 @@ public class YoutubeDownloaderAndCutter {
 
     logger.debug("commandPath = " + commandArray.toString());
 
-    Pair<Integer, List<List<String>>> result = programExecutor.executeFunctionAndGetStringOutputWithResult(
+    Pair<Integer, List<List<String>>> result = programExecutor.executeCommand(
         commandArray.toArray(new String[0]), "", logger);
     if (result.getKey() == 0) {
       logger.debug("result = " + result.getValue().size());
@@ -550,7 +562,7 @@ public class YoutubeDownloaderAndCutter {
   }
 
   private ArrayList<CutFileResultValue> cutOneFileByCutValue(String ffmpegPath, String audioFilePath,
-      CutValue pair, String pathToYoutubeFolder, Logger logger) {
+      CutValue pair, String pathToYoutubeFolder, Logger logger, String extension) {
 
     ArrayList<CutFileResultValue> result = new ArrayList<>();
 
@@ -571,8 +583,6 @@ public class YoutubeDownloaderAndCutter {
     commandArray.add("-to");
     commandArray.add(endTime);
 
-    String extension = FilenameUtils.getExtension(audioFilePath);
-
     String rootDirPath;
     String outputFilePath;
     if (SystemUtils.IS_OS_LINUX) {
@@ -586,7 +596,7 @@ public class YoutubeDownloaderAndCutter {
     String[] program = commandArray.toArray(new String[0]);
     logger.info("Run " + Arrays.toString(program));
     Pair<Integer, List<List<String>>> executionResult = programExecutor
-        .executeFunctionAndGetStringOutputWithResult(program, rootDirPath, logger);
+        .executeCommand(program, rootDirPath, logger);
     if (executionResult.getKey() == 0) {
       logger.debug("result = " + result);
     } else {
@@ -620,7 +630,7 @@ public class YoutubeDownloaderAndCutter {
   public class CutFileResultValue {
 
     List<String> commandArray;
-    File cattedFile;
+    File choppedFile;
 
   }
 
@@ -630,10 +640,11 @@ public class YoutubeDownloaderAndCutter {
 
     ArrayList<CutFileResultValue> result = new ArrayList<>();
 
+    String extension = FilenameUtils.getExtension(audioFilePath);
     for (int i = 0; i < pairs.size(); i++) {
-      result = cutOneFileByCutValue(ffmpegPath, audioFilePath, pairs.get(i), pathToYoutubeFolder, logger);
+      result = cutOneFileByCutValue(ffmpegPath, audioFilePath, pairs.get(i), pathToYoutubeFolder, logger, extension);
     }
-    return Collections.singletonList(result.get(0).cattedFile);
+    return Collections.singletonList(result.get(0).choppedFile);
   }
 
   private String getFileNameFromFfmpegCut(String[] executeResult) {

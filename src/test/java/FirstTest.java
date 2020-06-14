@@ -1,5 +1,5 @@
-import com.green.square.DownloadState;
 import com.green.square.ProgramExecutor;
+import com.green.square.model.DownloadState;
 import com.green.square.youtubedownloader.ProgramArgumentsController;
 import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
 import io.reactivex.rxjava3.annotations.NonNull;
@@ -9,7 +9,7 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.functions.Consumer;
 import io.reactivex.rxjava3.functions.Function;
 import java.io.File;
-import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -33,7 +33,7 @@ public class FirstTest {
     state.doOnSuccess(new Consumer<DownloadState>() {
       @Override
       public void accept(DownloadState downloadState) throws Throwable {
-        System.out.println("downloadState = " + downloadState);
+        logger.info("downloadState = " + downloadState);
 //        assertEquals(downloadState.getPairs().size(), 16);
       }
     }).doOnError(new Consumer<Throwable>() {
@@ -67,7 +67,7 @@ public class FirstTest {
       public void accept(DownloadState downloadState) throws Throwable {
         logger.info("downloadState.getDownloadedAudioFilePath() = " + downloadState.getDownloadedAudioFilePath());
 
-        ArrayList<File> files = youtubeDownloaderAndCutter
+        List<File> files = youtubeDownloaderAndCutter
             .cutTheFileIntoPieces(downloadState.getDownloadedAudioFilePath(), downloadState.getPairs(),
                 logger, arguments.getArguments(), downloadState.getCreatedFolderPath(),
                 downloadState.getDurationInSeconds());
@@ -82,7 +82,6 @@ public class FirstTest {
     }).subscribe(new SingleObserver<DownloadState>() {
       @Override
       public void onSubscribe(@NonNull Disposable d) {
-
       }
 
       @Override
@@ -96,6 +95,5 @@ public class FirstTest {
       }
     });
   }
-
 
 }

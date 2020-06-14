@@ -1,5 +1,6 @@
 package com.green.square.youtubedownloader;
 
+import com.green.square.model.CommandArgumentsResult;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -79,8 +80,8 @@ public class ProgramArgumentsController {
 
     linkId = "https://www.youtube.com/watch?v=ignvgjJwzGk";
 
-    CommandArgumentsResult defaultArguments = new CommandArgumentsResult(pathToYoutubedl, outFolder, linkId,
-        ffmpegPath);
+    CommandArgumentsResult defaultArguments = CommandArgumentsResult.builder().pathToYoutubedl(pathToYoutubedl)
+        .outputFolderPath(outFolder).linkId(linkId).ffmpegPath(ffmpegPath).build();
     return parsingArguments(args, defaultArguments, logger);
   }
 

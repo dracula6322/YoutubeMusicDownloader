@@ -1,6 +1,7 @@
 package com.green.square.youtubedownloader;
 
-import com.green.square.DownloadState;
+import com.green.square.model.CommandArgumentsResult;
+import com.green.square.model.DownloadState;
 import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.functions.Consumer;
@@ -43,15 +44,12 @@ public class YoutubeDownloaderMain {
     List<String> links = new ArrayList<>();
     links.add(linkId);
 
-//    youtubeDownloaderAndCutter
-//        .downloadAndCutMusicRxJavaStyleWithBuilder(pathToYoutubedl, outFolder, links, ffmpegPath, logger);
-
     @NonNull Single<DownloadState> state = youtubeDownloaderAndCutter.getPairs(pathToYoutubedl, linkId, logger);
 
     state.doOnSuccess(new Consumer<DownloadState>() {
       @Override
       public void accept(DownloadState downloadState) throws Throwable {
-        System.out.println("downloadState = " + downloadState);
+        logger.info("downloadState = " + downloadState);
       }
     }).doOnError(new Consumer<Throwable>() {
       @Override
@@ -87,16 +85,13 @@ public class YoutubeDownloaderMain {
       public void accept(DownloadState downloadState) throws Throwable {
         logger.info("downloadState.getDownloadedAudioFilePath() = " + downloadState.getDownloadedAudioFilePath());
 
-        ArrayList<File> files = youtubeDownloaderAndCutter
+        List<File> files = youtubeDownloaderAndCutter
             .cutTheFileIntoPieces(downloadState.getDownloadedAudioFilePath(), downloadState.getPairs(), logger,
-                arguments, downloadState.getCreatedFolderPath(), downloadState.getDurationInSeconds());
+                arguments, downloadState.getCreatedFolderPath(), downloadState.getDurationInSeconds(), "mp3");
 
         logger.info("files = " + files.toString());
       }
-    })
-
-        .subscribe();
-
+    }).subscribe();
   }
 
 

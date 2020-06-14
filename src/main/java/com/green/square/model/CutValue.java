@@ -1,4 +1,4 @@
-package com.green.square;
+package com.green.square.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

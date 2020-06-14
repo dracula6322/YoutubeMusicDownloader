@@ -17,10 +17,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import javax.annotation.Nonnull;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.util.TextUtils;
@@ -47,30 +43,21 @@ public class ProgramExecutor {
   }
 
   private ProgramExecutor(Logger logger) {
-    this.inputThread = Executors.newSingleThreadExecutor(new ThreadFactory() {
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread thread = new Thread(r);
-        logger.info("ProgramsExecutor inputThread " + thread);
-        return thread;
-      }
+    this.inputThread = Executors.newSingleThreadExecutor(r -> {
+      Thread thread = new Thread(r);
+      logger.info("ProgramsExecutor inputThread " + thread);
+      return thread;
     });
-    this.errorThread = Executors.newSingleThreadExecutor(new ThreadFactory() {
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread thread = new Thread(r);
-        logger.info("ProgramsExecutor errorThread " + thread);
-        return thread;
-      }
+    this.errorThread = Executors.newSingleThreadExecutor(r -> {
+      Thread thread = new Thread(r);
+      logger.info("ProgramsExecutor errorThread " + thread);
+      return thread;
     });
     this.backgroundExecutors = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(),
-        new ThreadFactory() {
-          @Override
-          public Thread newThread(@Nonnull Runnable r) {
-            Thread thread = new Thread(r);
-            logger.info("ProgramsExecutor backgroundExecutors " + thread);
-            return thread;
-          }
+        r -> {
+          Thread thread = new Thread(r);
+          logger.info("ProgramsExecutor backgroundExecutors " + thread);
+          return thread;
         });
   }
 
@@ -78,10 +65,9 @@ public class ProgramExecutor {
     return backgroundExecutors;
   }
 
-  public Pair<Integer, List<List<String>>> executeFunctionAndGetStringOutputWithResult(
-      String[] stringCommandArray, String rootDir, Logger logger) {
+  public Pair<Integer, List<List<String>>> executeCommand(String[] stringCommandArray, String rootDir, Logger logger) {
 
-    System.out.println(Arrays.toString(stringCommandArray));
+    logger.info(Arrays.toString(stringCommandArray));
 
     ArrayList<String> commandArray = new ArrayList<>(Arrays.asList(stringCommandArray));
     int executionCode = -1;
@@ -100,56 +86,44 @@ public class ProgramExecutor {
       }
 
       CompletableFuture<List<String>> inputCompletableFuture = CompletableFuture
-          .supplyAsync(new Supplier<List<String>>() {
-            @Override
-            public List<String> get() {
-              InputStream inputString = command.getInputStream();
-              List<String> resultInputString = getStringsFromInputStream(inputString);
-              try {
-                inputString.close();
-              } catch (IOException e) {
-                e.printStackTrace();
-              }
-              return resultInputString;
+          .supplyAsync(() -> {
+            List<String> resultInputString = new ArrayList<>();
+            try (InputStream inputString = command.getInputStream()) {
+              resultInputString = getStringsFromInputStream(inputString);
+            } catch (IOException e) {
+              e.printStackTrace();
+              logger.error(e.getMessage(), e);
             }
+            return resultInputString;
           }, inputThread);
 
       CompletableFuture<List<String>> errorCompletableFuture = CompletableFuture
-          .supplyAsync(new Supplier<List<String>>() {
-            @Override
-            public List<String> get() {
-              InputStream inputString = command.getErrorStream();
-              List<String> resultInputString = getStringsFromInputStream(inputString);
-              try {
-                inputString.close();
-              } catch (IOException e) {
-                e.printStackTrace();
-              }
-              return resultInputString;
+          .supplyAsync(() -> {
+            List<String> resultInputString = new ArrayList<>();
+            try (InputStream inputString = command.getErrorStream()) {
+              resultInputString = getStringsFromInputStream(inputString);
+            } catch (IOException e) {
+              e.printStackTrace();
+              logger.error(e.getMessage(), e);
             }
+            return resultInputString;
           }, errorThread);
 
       executionCode = command.waitFor();
 
       CompletableFuture
           .allOf(inputCompletableFuture, errorCompletableFuture)
-          .thenAccept(new Consumer<Void>() {
-            @Override
-            public void accept(Void aVoid) {
-              try {
-                result.set(0, inputCompletableFuture.get());
-                result.set(1, errorCompletableFuture.get());
-              } catch (InterruptedException | ExecutionException e) {
-                logger.error(e.getMessage(), e);
-                e.printStackTrace();
-              }
+          .thenAccept(aVoid -> {
+            try {
+              result.set(0, inputCompletableFuture.get());
+              result.set(1, errorCompletableFuture.get());
+            } catch (InterruptedException | ExecutionException e) {
+              logger.error(e.getMessage(), e);
+              e.printStackTrace();
             }
-          }).thenAccept(new Consumer<Void>() {
-        @Override
-        public void accept(Void aVoid) {
-          inputCompletableFuture.cancel(true);
-          errorCompletableFuture.cancel(true);
-        }
+          }).thenAccept(aVoid -> {
+        inputCompletableFuture.cancel(true);
+        errorCompletableFuture.cancel(true);
       }).join();
 
     } catch (IOException | InterruptedException e) {
@@ -167,9 +141,9 @@ public class ProgramExecutor {
 
     String line;
     List<String> result = new ArrayList<>();
-    try {
-      Reader inputStreamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
-      BufferedReader stdInput = new BufferedReader(inputStreamReader);
+
+    try (Reader inputStreamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
+        BufferedReader stdInput = new BufferedReader(inputStreamReader)) {
       while ((line = stdInput.readLine()) != null) {
         result.add(line);
       }
@@ -178,7 +152,6 @@ public class ProgramExecutor {
     }
 
     return result;
-
   }
 
 }

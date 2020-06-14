@@ -1,6 +1,6 @@
-package com.green.square;
+package com.green.square.view;
 
-import com.green.square.youtubedownloader.CommandArgumentsResult;
+import com.green.square.model.CommandArgumentsResult;
 import com.green.square.youtubedownloader.ProgramArgumentsController;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClickEvent;
