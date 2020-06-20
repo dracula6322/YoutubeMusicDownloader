@@ -8,7 +8,6 @@ import com.green.square.model.CutValue;
 import com.green.square.model.DownloadState;
 import com.green.square.youtubedownloader.ProgramArgumentsController;
 import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
-import com.green.square.youtubedownloader.YoutubeDownloaderMain;
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.Component;
@@ -25,6 +24,9 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.renderer.TextRenderer;
 import com.vaadin.flow.function.ValueProvider;
+import com.vaadin.flow.router.BeforeEvent;
+import com.vaadin.flow.router.HasUrlParameter;
+import com.vaadin.flow.router.OptionalParameter;
 import com.vaadin.flow.router.Route;
 import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.Single;
@@ -33,6 +35,7 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
@@ -40,12 +43,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
-@Route
-public class MainView extends VerticalLayout {
+@Route(value = "", absolute = true)
+public class MainViewClass extends VerticalLayout implements HasUrlParameter<String> {
 
   Grid<CutValue> grid = new Grid<>();
   Button cutFile = new Button("Cut chosen file as zip");
-  Logger logger = LoggerFactory.getLogger(YoutubeDownloaderMain.class);
+  Logger logger = LoggerFactory.getLogger(MainViewClass.class);
   CommandArgumentsResult arguments = CommandArgumentsResult.builder().build();
   DownloadState currentDownloadState = DownloadState.builder().build();
 
@@ -75,7 +78,7 @@ public class MainView extends VerticalLayout {
     super.onDetach(detachEvent);
   }
 
-  public MainView() {
+  public MainViewClass() {
 
     logger.info("MainView construction");
 
@@ -177,10 +180,10 @@ public class MainView extends VerticalLayout {
 
     return youtubeDownloaderAndCutter
         .cutTheFileIntoPieces(downloadedVideoFilePath.getAbsolutePath(), selectedItems, logger,
-            arguments, currentDownloadState.getCreatedFolderPath(), currentDownloadState.getDurationInSeconds(), "mp3");
+            currentDownloadState.getCreatedFolderPath(), "mp3", arguments.getFfmpegPath());
   }
 
-  public Grid<CutValue> getGridView(ArrayList<CutValue> values) {
+  public Grid<CutValue> getGridView(List<CutValue> values) {
 
     Grid<CutValue> grid = new Grid<>(CutValue.class);
     grid.setSelectionMode(SelectionMode.MULTI);
@@ -231,5 +234,16 @@ public class MainView extends VerticalLayout {
     }
     String hashName = fileManagerController.getHashNameFile(fileName);
     ui.getPage().open(String.format("/files/%s/%s", id, hashName));
+  }
+
+  @Override
+  public void setParameter(BeforeEvent beforeEvent, @OptionalParameter String s) {
+
+    Map<String, List<String>> parameters = beforeEvent.getLocation().getQueryParameters().getParameters();
+    List<String> segments = beforeEvent.getLocation().getSegments();
+
+    logger.info("parameters = " + parameters.toString());
+    logger.info("segments = " + segments);
+    logger.info("setParameter " + s);
   }
 }

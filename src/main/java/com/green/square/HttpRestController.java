@@ -11,7 +11,6 @@ import io.reactivex.rxjava3.disposables.Disposable;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletResponse;
@@ -25,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-public class GreetingController extends HttpServlet {
+public class HttpRestController extends HttpServlet {
 
   @Autowired
   private DownloadStateRepository downloadStateRepository;
@@ -41,7 +40,7 @@ public class GreetingController extends HttpServlet {
   public Logger logger = LoggerFactory.getLogger(getClass().getName());
 
   @Autowired
-  public GreetingController(ProgramArgumentsController programArgumentsController,
+  public HttpRestController(ProgramArgumentsController programArgumentsController,
       YoutubeDownloaderAndCutter youtubeDownloaderAndCutter, ZipController zipController) {
     this.youtubeDownloaderAndCutter = youtubeDownloaderAndCutter;
     this.commandArgumentsResult = programArgumentsController.getArguments();
@@ -84,43 +83,61 @@ public class GreetingController extends HttpServlet {
 
     String videoFullLength = "https://www.youtube.com/watch?v=" + videoId;
 
-    @NonNull Single<DownloadState> rxSinglePairs = youtubeDownloaderAndCutter
-        .getPairs(arguments.pathToYoutubedl, videoFullLength, logger);
+    Single<DownloadState> pairsAndCutTheFileIntoPieces = youtubeDownloaderAndCutter
+        .getPairsAndCutTheFileIntoPieces(arguments.pathToYoutubedl, videoFullLength, logger, arguments.ffmpegPath,
+            arguments.outputFolderPath);
 
-    rxSinglePairs.subscribe(new SingleObserver<DownloadState>() {
+    pairsAndCutTheFileIntoPieces.subscribe(new SingleObserver<DownloadState>() {
       @Override
       public void onSubscribe(@NonNull Disposable d) {
-        logger.info("onSubscribe");
-        logger.info(d.toString());
+
       }
 
       @Override
       public void onSuccess(@NonNull DownloadState downloadState) {
-
-        logger.info("onSuccess");
         logger.info(downloadState.toString());
-
-        downloadStateRepository.save(downloadState);
-
-        File downloadedVideoFilePath = youtubeDownloaderAndCutter
-            .downloadVideo(logger, arguments.getPathToYoutubedl(), downloadState.getAudioFileName(),
-                downloadState.getCreatedFolderPath(), downloadState.getVideoId());
-
-        List<File> files = youtubeDownloaderAndCutter
-            .cutTheFileIntoPieces(downloadedVideoFilePath.getAbsolutePath(), downloadState.getPairs(), logger,
-                arguments, downloadState.getCreatedFolderPath(), downloadState.getDurationInSeconds(), "mp3");
-
-        logger.info("downloadAndCutVideo is over");
-        logger.info(files.toString());
       }
 
       @Override
       public void onError(@NonNull Throwable e) {
-        logger.error("onError");
-        logger.error(e.getMessage());
-        e.printStackTrace();
+        logger.error(e.getMessage(), e);
       }
     });
+//
+//    rxSinglePairs.subscribe(new SingleObserver<DownloadState>() {
+//      @Override
+//      public void onSubscribe(@NonNull Disposable d) {
+//        logger.info("onSubscribe");
+//        logger.info(d.toString());
+//      }
+//
+//      @Override
+//      public void onSuccess(@NonNull DownloadState downloadState) {
+//
+//        logger.info("onSuccess");
+//        logger.info(downloadState.toString());
+//
+//        downloadStateRepository.save(downloadState);
+//
+//        File downloadedVideoFilePath = HttpRestController.this.youtubeDownloaderAndCutter
+//            .downloadVideo(logger, arguments.getPathToYoutubedl(), downloadState.getAudioFileName(),
+//                downloadState.getCreatedFolderPath(), downloadState.getVideoId());
+//
+//        List<File> files = HttpRestController.this.youtubeDownloaderAndCutter
+//            .cutTheFileIntoPieces(downloadedVideoFilePath.getAbsolutePath(), downloadState.getPairs(), logger,
+//                arguments, downloadState.getCreatedFolderPath(), "mp3");
+//
+//        logger.info("downloadAndCutVideo is over");
+//        logger.info(files.toString());
+//      }
+//
+//      @Override
+//      public void onError(@NonNull Throwable e) {
+//        logger.error("onError");
+//        logger.error(e.getMessage());
+//        e.printStackTrace();
+//      }
+//    });
 
   }
 

@@ -2,16 +2,11 @@ package com.green.square.youtubedownloader;
 
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
-import com.google.api.client.http.InputStreamContent;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.model.CommentThreadListResponse;
-import com.google.api.services.youtube.model.ThumbnailSetResponse;
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -70,43 +65,6 @@ public class YoutubeAPIController {
       System.err.println(e.toString());
       return "{}";
     }
-  }
-
-  public String getImages(String idVideo) throws GeneralSecurityException, IOException {
-    YouTube youtubeService = getService();
-
-    try {
-
-      File mediaFile = new File("YOUR_FILE");
-      mediaFile.createNewFile();
-      InputStreamContent mediaContent =
-          new InputStreamContent("image/png",
-              new BufferedInputStream(new FileInputStream(mediaFile)));
-      mediaContent.setLength(mediaFile.length());
-
-      // Define and execute the API request
-      YouTube.Thumbnails.Set request = youtubeService.thumbnails()
-          .set(idVideo, mediaContent);
-      ThumbnailSetResponse response = request.execute();
-      //response.soutv
-      return response.toString();
-    } catch (GoogleJsonResponseException e) {
-      System.err.println(e.toString());
-      return "{}";
-    }
-
-//    YouTube.CommentThreads.List request = youtubeService.commentThreads()
-//        .list("snippet,replies");
-//    try {
-//      CommentThreadListResponse response = request.setKey(DEVELOPER_KEY)
-//          .setOrder("relevance")
-//          .setVideoId(idVideo)
-//          .execute();
-//      return response.toString();
-//    } catch (GoogleJsonResponseException e) {
-//      System.err.println(e.toString());
-//      return "{}";
-//    }
   }
 
   private List<String> parsingGetCommentThreadsResponse(@Nonnull String response) {

@@ -1,6 +1,7 @@
 package com.green.square.model;
 
-import java.util.ArrayList;
+import java.nio.file.Path;
+import java.util.List;
 import lombok.Builder;
 import lombok.Data;
 import lombok.ToString;
@@ -19,7 +20,8 @@ public class DownloadState {
   String json;
   String audioFileName;
   String createdFolderPath;
+  List<Path> trimmedFiles;
   long durationInSeconds;
-  ArrayList<CutValue> pairs;
+  List<CutValue> pairs;
 
 }
