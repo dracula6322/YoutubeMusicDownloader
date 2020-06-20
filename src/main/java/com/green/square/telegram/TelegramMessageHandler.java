@@ -1,6 +1,7 @@
 package com.green.square.telegram;
 
 import com.green.square.FileManagerController;
+import com.green.square.TelegramBotToken;
 import com.green.square.ZipController;
 import com.green.square.model.CommandArgumentsResult;
 import com.green.square.model.DownloadState;
@@ -178,6 +179,6 @@ public class TelegramMessageHandler extends TelegramLongPollingBot {
 
   @Override
   public String getBotToken() {
-    return "";
+    return TelegramBotToken.token;
   }
 }
