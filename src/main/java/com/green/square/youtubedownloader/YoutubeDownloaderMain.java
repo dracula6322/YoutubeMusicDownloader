@@ -42,8 +42,9 @@ public class YoutubeDownloaderMain {
     List<String> links = new ArrayList<>();
     links.add(linkId);
 
-    youtubeDownloaderAndCutter.getPairsAndCutTheFileIntoPieces(pathToYoutubedl, linkId, logger, ffmpegPath, outFolder)
-        .subscribe(new SingleObserver<DownloadState>() {
+    youtubeDownloaderAndCutter
+        .getPairsAndCutTheAllByThisPairsFileIntoPieces(pathToYoutubedl, linkId, logger, ffmpegPath, outFolder)
+        .subscribe(new SingleObserver<>() {
           @Override
           public void onSubscribe(@NonNull Disposable d) {
 
@@ -60,6 +61,4 @@ public class YoutubeDownloaderMain {
           }
         });
   }
-
-
 }

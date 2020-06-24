@@ -50,7 +50,7 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
   Button cutFile = new Button("Cut chosen file as zip");
   Logger logger = LoggerFactory.getLogger(MainViewClass.class);
   CommandArgumentsResult arguments = CommandArgumentsResult.builder().build();
-  DownloadState currentDownloadState = DownloadState.builder().build();
+  DownloadState state = DownloadState.builder().build();
 
   @Autowired
   ZipController zipController;
@@ -119,9 +119,9 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
           logger.info(downloadState.toString());
 
           downloadStateRepository.save(downloadState);
-          currentDownloadState = downloadState;
+          state = downloadState;
 
-          Grid<CutValue> newGrid = getGridView(downloadState.getPairs());
+          Grid<CutValue> newGrid = getGridView(downloadState.getCutValues());
           remove(cutFile);
           remove(grid);
           add(newGrid);
@@ -167,20 +167,19 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
 
   private List<File> downloadAndCutFile(List<CutValue> selectedItems) {
 
-    String createdFolderPath = youtubeDownloaderAndCutter
-        .createFolder(arguments.getOutputFolderPath(), currentDownloadState.getVideoId(),
-            currentDownloadState.getAudioFileName(), logger);
-    currentDownloadState = currentDownloadState.toBuilder().createdFolderPath(createdFolderPath).build();
+    List<File> result = youtubeDownloaderAndCutter
+        .downloadAndCutFileByCutValues(logger, selectedItems, arguments.getPathToYoutubedl(),
+            state.getAudioFileNameFromJson(),
+            state.getVideoId(), arguments.getOutputFolderPath(), arguments.getFfmpegPath(), state.getVideoTitle(),
+            state.getVideoLink());
 
-    File downloadedVideoFilePath = youtubeDownloaderAndCutter
-        .downloadVideo(logger, arguments.getPathToYoutubedl(), currentDownloadState.getAudioFileName(),
-            currentDownloadState.getCreatedFolderPath(), currentDownloadState.getVideoId());
-    currentDownloadState = currentDownloadState.toBuilder()
-        .downloadedAudioFilePath(downloadedVideoFilePath.getAbsolutePath()).build();
+    File downloadedFile = result.remove(0);
 
-    return youtubeDownloaderAndCutter
-        .cutTheFileIntoPieces(downloadedVideoFilePath.getAbsolutePath(), selectedItems, logger,
-            currentDownloadState.getCreatedFolderPath(), "mp3", arguments.getFfmpegPath());
+    state = state.toBuilder()
+        .downloadedAudioFilePath(downloadedFile.getAbsolutePath()).build();
+
+    return result;
+
   }
 
   public Grid<CutValue> getGridView(List<CutValue> values) {
@@ -217,7 +216,7 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
     Optional<UI> ui = getUI();
     for (File file : cutFiles) {
       String fileName = file.getName();
-      ui.ifPresent(value -> openPageDownloadFile(fileName, value, logger, currentDownloadState.getVideoId()));
+      ui.ifPresent(value -> openPageDownloadFile(fileName, value, logger, state.getVideoId()));
     }
   }
 

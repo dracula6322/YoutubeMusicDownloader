@@ -17,15 +17,14 @@ public class FirstTest {
     Logger logger = LoggerFactory.getLogger(FirstTest.class);
 
     ProgramExecutor programExecutor = new ProgramExecutor();
-
     YoutubeDownloaderAndCutter youtubeDownloaderAndCutter = new YoutubeDownloaderAndCutter(programExecutor, null);
     ProgramArgumentsController arguments = new ProgramArgumentsController();
     String videoLink = "https://www.youtube.com/watch?v=Kuy17LO14OA&t=1925s";
 
     youtubeDownloaderAndCutter
-        .getPairsAndCutTheFileIntoPieces(arguments.getArguments().getPathToYoutubedl(), videoLink, logger,
+        .getPairsAndCutTheAllByThisPairsFileIntoPieces(arguments.getArguments().getPathToYoutubedl(), videoLink, logger,
             arguments.getArguments().getFfmpegPath(), arguments.getArguments().getOutputFolderPath())
-        .subscribe(new SingleObserver<DownloadState>() {
+        .subscribe(new SingleObserver<>() {
           @Override
           public void onSubscribe(@NonNull Disposable d) {
           }
@@ -41,5 +40,4 @@ public class FirstTest {
           }
         });
   }
-
 }

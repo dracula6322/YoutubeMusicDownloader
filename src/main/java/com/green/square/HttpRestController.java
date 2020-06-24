@@ -84,7 +84,8 @@ public class HttpRestController extends HttpServlet {
     String videoFullLength = "https://www.youtube.com/watch?v=" + videoId;
 
     Single<DownloadState> pairsAndCutTheFileIntoPieces = youtubeDownloaderAndCutter
-        .getPairsAndCutTheFileIntoPieces(arguments.pathToYoutubedl, videoFullLength, logger, arguments.ffmpegPath,
+        .getPairsAndCutTheAllByThisPairsFileIntoPieces(arguments.pathToYoutubedl, videoFullLength, logger,
+            arguments.ffmpegPath,
             arguments.outputFolderPath);
 
     pairsAndCutTheFileIntoPieces.subscribe(new SingleObserver<DownloadState>() {

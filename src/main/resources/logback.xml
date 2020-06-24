@@ -14,7 +14,7 @@
 
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
-      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{35} - %msg %n</pattern>
+      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger - %msg %n</pattern>
     </encoder>
   </appender>
 
@@ -23,4 +23,13 @@
   </root>
   <logger name="org.apache" level="WARN"/>
   <logger name="httpclient" level="WARN"/>
+  <logger name="org.springframework" level="WARN"/>
+  <logger name="org.hibernate.*" level="WARN"/>
+  <logger name="dev-updater" level="WARN"/>
+  <logger name="dev-webpack" level="WARN"/>
+
+
+  <logger name="com.vaadin.flow.spring.VaadinServletContextInitializer" level="WARN"/>
+
+
 </configuration>

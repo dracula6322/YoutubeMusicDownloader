@@ -18,10 +18,9 @@ public class DownloadState {
   String downloadedAudioFilePath;
   @ToString.Exclude
   String json;
-  String audioFileName;
-  String createdFolderPath;
+  String audioFileNameFromJson;
   List<Path> trimmedFiles;
   long durationInSeconds;
-  List<CutValue> pairs;
+  List<CutValue> cutValues;
 
 }
