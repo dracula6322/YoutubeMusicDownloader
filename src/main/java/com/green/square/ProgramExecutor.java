@@ -1,5 +1,6 @@
 package com.green.square;
 
+import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter.ResultPublisher;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -30,13 +31,20 @@ public class ProgramExecutor {
     public static final ProgramExecutor HOLDER_INSTANCE = new ProgramExecutor();
   }
 
+  public static final ResultPublisher<String> EMPTY_RESULT_PUBLISHER = new ResultPublisher<String>() {
+    @Override
+    public void publishResult(String value) {
+
+    }
+  };
+
   public static ProgramExecutor getInstance() {
     return SingletonHolder.HOLDER_INSTANCE;
   }
 
-  private ExecutorService inputThread;
-  private ExecutorService errorThread;
-  private ExecutorService backgroundExecutors;
+  private final ExecutorService inputThread;
+  private final ExecutorService errorThread;
+  private final ExecutorService backgroundExecutors;
 
   public ProgramExecutor() {
     this(LoggerFactory.getLogger(ProgramExecutor.class));
@@ -67,7 +75,19 @@ public class ProgramExecutor {
 
   public Pair<Integer, List<List<String>>> executeCommand(String[] stringCommandArray, String rootDir, Logger logger) {
 
-    logger.info(Arrays.toString(stringCommandArray));
+    return this.executeCommand(stringCommandArray, rootDir, logger, EMPTY_RESULT_PUBLISHER);
+
+  }
+
+  public Pair<Integer, List<List<String>>> executeCommand(String[] stringCommandArray, String rootDir, Logger logger,
+      ResultPublisher<String> resultPublisher) {
+
+    StringBuilder stringCommandStringBuilder = new StringBuilder();
+    for (String s : stringCommandArray) {
+      stringCommandStringBuilder.append(s).append(" ");
+    }
+
+    logger.info(stringCommandStringBuilder.toString());
 
     ArrayList<String> commandArray = new ArrayList<>(Arrays.asList(stringCommandArray));
     int executionCode = -1;
@@ -101,7 +121,7 @@ public class ProgramExecutor {
           .supplyAsync(() -> {
             List<String> resultInputString = new ArrayList<>();
             try (InputStream inputString = command.getErrorStream()) {
-              resultInputString = getStringsFromInputStream(inputString);
+              resultInputString = getStringsFromInputStream(inputString, resultPublisher);
             } catch (IOException e) {
               e.printStackTrace();
               logger.error(e.getMessage(), e);
@@ -137,7 +157,8 @@ public class ProgramExecutor {
     return new ImmutablePair<>(executionCode, result);
   }
 
-  private static List<String> getStringsFromInputStream(InputStream inputStream) {
+  private static List<String> getStringsFromInputStream(InputStream inputStream,
+      ResultPublisher<String> resultPublisher) {
 
     String line;
     List<String> result = new ArrayList<>();
@@ -145,6 +166,7 @@ public class ProgramExecutor {
     try (Reader inputStreamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
         BufferedReader stdInput = new BufferedReader(inputStreamReader)) {
       while ((line = stdInput.readLine()) != null) {
+        resultPublisher.publishResult(line);
         result.add(line);
       }
     } catch (IOException e) {
@@ -154,4 +176,8 @@ public class ProgramExecutor {
     return result;
   }
 
+
+  private List<String> getStringsFromInputStream(InputStream inputString) {
+    return getStringsFromInputStream(inputString, EMPTY_RESULT_PUBLISHER);
+  }
 }

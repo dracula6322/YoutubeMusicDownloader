@@ -4,8 +4,8 @@ import com.green.square.DownloadStateRepository;
 import com.green.square.FileManagerController;
 import com.green.square.ZipController;
 import com.green.square.model.CommandArgumentsResult;
-import com.green.square.model.CutValue;
 import com.green.square.model.DownloadState;
+import com.green.square.model.VideoInterval;
 import com.green.square.youtubedownloader.ProgramArgumentsController;
 import com.green.square.youtubedownloader.YoutubeDownloaderAndCutter;
 import com.vaadin.flow.component.AttachEvent;
@@ -46,7 +46,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 @Route(value = "", absolute = true)
 public class MainViewClass extends VerticalLayout implements HasUrlParameter<String> {
 
-  Grid<CutValue> grid = new Grid<>();
+  Grid<VideoInterval> grid = new Grid<>();
   Button cutFile = new Button("Cut chosen file as zip");
   Logger logger = LoggerFactory.getLogger(MainViewClass.class);
   CommandArgumentsResult arguments = CommandArgumentsResult.builder().build();
@@ -121,7 +121,7 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
           downloadStateRepository.save(downloadState);
           state = downloadState;
 
-          Grid<CutValue> newGrid = getGridView(downloadState.getCutValues());
+          Grid<VideoInterval> newGrid = getGridView(downloadState.getCutValues());
           remove(cutFile);
           remove(grid);
           add(newGrid);
@@ -142,7 +142,7 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
 
     cutFile.addClickListener((ComponentEventListener<ClickEvent<Button>>) event -> {
 
-      ArrayList<CutValue> selectedItems = new ArrayList<>(grid.getSelectedItems());
+      ArrayList<VideoInterval> selectedItems = new ArrayList<>(grid.getSelectedItems());
 
       List<File> cutFiles = downloadAndCutFile(selectedItems);
       if (cutFiles == null || cutFiles.isEmpty()) {
@@ -165,13 +165,13 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
     add(cutFile);
   }
 
-  private List<File> downloadAndCutFile(List<CutValue> selectedItems) {
+  private List<File> downloadAndCutFile(List<VideoInterval> selectedItems) {
 
     List<File> result = youtubeDownloaderAndCutter
         .downloadAndCutFileByCutValues(logger, selectedItems, arguments.getPathToYoutubedl(),
             state.getAudioFileNameFromJson(),
             state.getVideoId(), arguments.getOutputFolderPath(), arguments.getFfmpegPath(), state.getVideoTitle(),
-            state.getVideoLink());
+            state.getVideoLink(), YoutubeDownloaderAndCutter.getDefaultResultPublisher());
 
     File downloadedFile = result.remove(0);
 
@@ -182,14 +182,14 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
 
   }
 
-  public Grid<CutValue> getGridView(List<CutValue> values) {
+  public Grid<VideoInterval> getGridView(List<VideoInterval> values) {
 
-    Grid<CutValue> grid = new Grid<>(CutValue.class);
+    Grid<VideoInterval> grid = new Grid<>(VideoInterval.class);
     grid.setSelectionMode(SelectionMode.MULTI);
     grid.setItems(values);
     grid.removeAllColumns();
 
-    grid.addColumn(new TextRenderer<>(CutValue::getTitle))
+    grid.addColumn(new TextRenderer<>(VideoInterval::getTitle))
         .setHeader("Name")
         .setResizable(true);
 
@@ -197,10 +197,10 @@ public class MainViewClass extends VerticalLayout implements HasUrlParameter<Str
         .setHeader("Time")
         .setResizable(true);
 
-    grid.addComponentColumn((ValueProvider<CutValue, Component>) cutValue -> {
+    grid.addComponentColumn((ValueProvider<VideoInterval, Component>) cutValue -> {
       Button button = new Button(new Icon(VaadinIcon.DOWNLOAD));
       button.addClickListener((ComponentEventListener<ClickEvent<Button>>) event -> {
-        List<CutValue> selectedItems = new ArrayList<>(grid.getSelectedItems());
+        List<VideoInterval> selectedItems = new ArrayList<>(grid.getSelectedItems());
         selectedItems.add(cutValue);
         List<File> cutFiles = downloadAndCutFile(selectedItems);
         downloadFilesFromCurrentPage(cutFiles);

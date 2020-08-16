@@ -21,6 +21,6 @@ public class DownloadState {
   String audioFileNameFromJson;
   List<Path> trimmedFiles;
   long durationInSeconds;
-  List<CutValue> cutValues;
+  List<VideoInterval> cutValues;
 
 }

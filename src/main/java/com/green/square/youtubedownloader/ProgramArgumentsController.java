@@ -73,9 +73,9 @@ public class ProgramArgumentsController {
       pathToYoutubedl = "/usr/local/bin/youtube-dl";
       ffmpegPath = "/usr/bin/ffmpeg";
     } else {
-      outFolder = "C:\\youtubeNew\\";
-      pathToYoutubedl = "C:\\Users\\Andrey\\Downloads\\youtube\\youtube-dl.exe";
-      ffmpegPath = "E:\\Programs\\ffmpeg\\bin\\ffmpeg.exe";
+      outFolder = "E:\\YoutubeDownloaderFolder\\";
+      pathToYoutubedl = "D:\\Program\\Youtube-dl\\youtube-dl.exe";
+      ffmpegPath = "D:\\Program\\Ffmpeg\\bin\\ffmpeg.exe";
     }
 
     linkId = "https://www.youtube.com/watch?v=ignvgjJwzGk";

@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 public class YoutubeDownloaderMain {
 
+  // [ERROR: Signature extraction failed: Traceback (most recent call last):,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\extractor\youtube.py", line 1426, in _decrypt_signature,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\extractor\youtube.py", line 1338, in _extract_signature_function,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\extractor\youtube.py", line 1402, in <lambda>,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\jsinterp.py", line 258, in resf,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\jsinterp.py", line 56, in interpret_statement,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\jsinterp.py", line 92, in interpret_expression,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\jsinterp.py", line 189, in interpret_expression,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\jsinterp.py", line 56, in interpret_statement,   File "C:\Users\dst\AppData\Roaming\Build archive\youtube-dl\ytdl-org\tmpspbsbtmq\build\youtube_dl\jsinterp.py", line 211, in interpret_expression, youtube_dl.utils.ExtractorError: Unsupported JS expression '['; please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; type  youtube-dl -U  to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.,  (caused by ExtractorError("Unsupported JS expression '['; please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; type  youtube-dl -U  to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.",)); please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; type  youtube-dl -U  to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.]])
   @Autowired
   ProgramArgumentsController programArgumentsController;
 
@@ -44,7 +45,7 @@ public class YoutubeDownloaderMain {
 
     youtubeDownloaderAndCutter
         .getPairsAndCutTheAllByThisPairsFileIntoPieces(pathToYoutubedl, linkId, logger, ffmpegPath, outFolder)
-        .subscribe(new SingleObserver<>() {
+        .subscribe(new SingleObserver<DownloadState>() {
           @Override
           public void onSubscribe(@NonNull Disposable d) {
 
